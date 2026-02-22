@@ -130,7 +130,26 @@ app.Lifetime.ApplicationStarted.Register(() =>
   app.Logger.LogInformation("Start MSFS flight and keep this bridge window open.");
 });
 
-app.Run();
+try
+{
+  app.Run();
+}
+catch (FileNotFoundException ex) when (IsSimConnectLoadFailure(ex))
+{
+  Console.Error.WriteLine("SimConnect managed assembly load failed.");
+  Console.Error.WriteLine("Check these items:");
+  Console.Error.WriteLine("1) lib/Microsoft.FlightSimulator.SimConnect.dll exists");
+  Console.Error.WriteLine("2) lib/SimConnect.dll exists");
+  Console.Error.WriteLine("3) Visual C++ 2015-2022 Redistributable (x64) is installed");
+  Console.Error.WriteLine("4) Use 64-bit .NET runtime");
+  throw;
+}
+
+static bool IsSimConnectLoadFailure(FileNotFoundException ex)
+{
+  var fileName = ex.FileName ?? string.Empty;
+  return fileName.Contains("Microsoft.FlightSimulator.SimConnect.dll", StringComparison.OrdinalIgnoreCase);
+}
 
 internal sealed class BridgeOptions
 {
@@ -362,17 +381,17 @@ internal sealed class SimConnectOwnshipService : BackgroundService
 
   private void RegisterOwnshipDefinition(SimConnect simConnect)
   {
-    simConnect.AddToDataDefinition((uint)DefinitionId.Ownship, "PLANE LATITUDE", "degrees", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
-    simConnect.AddToDataDefinition((uint)DefinitionId.Ownship, "PLANE LONGITUDE", "degrees", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
-    simConnect.AddToDataDefinition((uint)DefinitionId.Ownship, "INDICATED ALTITUDE", "feet", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
-    simConnect.AddToDataDefinition((uint)DefinitionId.Ownship, "PLANE ALTITUDE", "feet", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
-    simConnect.AddToDataDefinition((uint)DefinitionId.Ownship, "GROUND VELOCITY", "knots", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
-    simConnect.AddToDataDefinition((uint)DefinitionId.Ownship, "PLANE HEADING DEGREES TRUE", "degrees", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
-    simConnect.AddToDataDefinition((uint)DefinitionId.Ownship, "VERTICAL SPEED", "feet per minute", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
-    simConnect.AddToDataDefinition((uint)DefinitionId.Ownship, "SIM ON GROUND", "bool", SIMCONNECT_DATATYPE.INT32, 0f, SimConnect.SIMCONNECT_UNUSED);
-    simConnect.AddToDataDefinition((uint)DefinitionId.Ownship, "TITLE", null, SIMCONNECT_DATATYPE.STRING256, 0f, SimConnect.SIMCONNECT_UNUSED);
-    simConnect.AddToDataDefinition((uint)DefinitionId.Ownship, "ATC ID", null, SIMCONNECT_DATATYPE.STRING64, 0f, SimConnect.SIMCONNECT_UNUSED);
-    simConnect.RegisterDataDefineStruct<OwnshipData>((uint)DefinitionId.Ownship);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "PLANE LATITUDE", "degrees", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "PLANE LONGITUDE", "degrees", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "INDICATED ALTITUDE", "feet", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "PLANE ALTITUDE", "feet", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "GROUND VELOCITY", "knots", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "PLANE HEADING DEGREES TRUE", "degrees", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "VERTICAL SPEED", "feet per minute", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "SIM ON GROUND", "bool", SIMCONNECT_DATATYPE.INT32, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "TITLE", null, SIMCONNECT_DATATYPE.STRING256, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "ATC ID", null, SIMCONNECT_DATATYPE.STRING64, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.RegisterDataDefineStruct<OwnshipData>(DefinitionId.Ownship);
   }
 
   private void RequestOwnshipStream()
@@ -385,8 +404,8 @@ internal sealed class SimConnectOwnshipService : BackgroundService
       }
 
       _simConnect.RequestDataOnSimObject(
-        (uint)RequestId.Ownship,
-        (uint)DefinitionId.Ownship,
+        RequestId.Ownship,
+        DefinitionId.Ownship,
         SimConnect.SIMCONNECT_OBJECT_ID_USER,
         SIMCONNECT_PERIOD.SIM_FRAME,
         SIMCONNECT_DATA_REQUEST_FLAG.CHANGED,

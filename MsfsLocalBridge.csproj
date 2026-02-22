@@ -2,15 +2,20 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PlatformTarget>x64</PlatformTarget>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>MsfsLocalBridge</RootNamespace>
   </PropertyGroup>
 
-  <Target Name="EnsureSimConnectAssembly" BeforeTargets="ResolveReferences">
+  <Target Name="EnsureSimConnectAssemblies" BeforeTargets="ResolveReferences">
     <Error
       Condition="!Exists('lib\Microsoft.FlightSimulator.SimConnect.dll')"
       Text="Missing SimConnect managed assembly. Copy Microsoft.FlightSimulator.SimConnect.dll into tools/msfs-local-bridge/lib/ before building." />
+    <Error
+      Condition="!Exists('lib\SimConnect.dll')"
+      Text="Missing native SimConnect runtime. Copy SimConnect.dll into tools/msfs-local-bridge/lib/ before building." />
   </Target>
 
   <ItemGroup>
@@ -21,6 +26,23 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="lib\Microsoft.FlightSimulator.SimConnect.dll" CopyToOutputDirectory="PreserveNewest" />
+    <PackageReference Include="System.Security.Permissions" Version="8.0.0" />
+    <PackageReference Include="System.Runtime.Serialization.Formatters" Version="9.0.0" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="lib\Microsoft.FlightSimulator.SimConnect.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="lib\SimConnect.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="CopySimConnectToOutputRoot" AfterTargets="Build">
+    <Copy
+      SourceFiles="lib\Microsoft.FlightSimulator.SimConnect.dll"
+      DestinationFolder="$(OutDir)"
+      SkipUnchangedFiles="true" />
+    <Copy
+      SourceFiles="lib\SimConnect.dll"
+      DestinationFolder="$(OutDir)"
+      SkipUnchangedFiles="true" />
+  </Target>
 </Project>

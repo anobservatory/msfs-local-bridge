@@ -13,23 +13,28 @@ This bridge is the real SimConnect sender.
 
 1. MSFS 2020 or 2024 installed.
 2. `.NET 8 SDK` installed.
-3. SimConnect managed DLL available:
-   - `Microsoft.FlightSimulator.SimConnect.dll`
+3. SimConnect DLLs available:
+   - `Microsoft.FlightSimulator.SimConnect.dll` (managed wrapper)
+   - `SimConnect.dll` (native runtime)
+4. Visual C++ Redistributable (x64)
+   - Microsoft Visual C++ 2015-2022 Redistributable (x64)
 
-## 2) Put SimConnect DLL in this project
+## 2) Put SimConnect DLLs in this project
 
-Copy `Microsoft.FlightSimulator.SimConnect.dll` into:
+Copy both files into:
 
 `tools/msfs-local-bridge/lib/`
 
-So the final file is:
+Final files should be:
 
 `tools/msfs-local-bridge/lib/Microsoft.FlightSimulator.SimConnect.dll`
+`tools/msfs-local-bridge/lib/SimConnect.dll`
 
 If you do not know where the DLL is, search in PowerShell:
 
 ```powershell
 Get-ChildItem -Path "C:\" -Filter "Microsoft.FlightSimulator.SimConnect.dll" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 5 FullName
+Get-ChildItem -Path "C:\" -Filter "SimConnect.dll" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 10 FullName
 ```
 
 ## 3) Run bridge on Windows
@@ -97,7 +102,12 @@ npm run dev
    - web app not restarted after `.env.local` change
 3. Still fixed `MSFS123/C172` path:
    - mock sender is still active somewhere
-4. Bridge starts but no ownship:
+4. Startup fails with `Could not load ... Microsoft.FlightSimulator.SimConnect.dll`:
+   - copy both DLLs to `lib` (not only managed DLL)
+   - run `dotnet clean` then rerun bridge
+   - install Microsoft Visual C++ 2015-2022 Redistributable (x64)
+   - verify both DLLs also exist in output root (`bin/.../win-x64/`)
+5. Bridge starts but no ownship:
    - MSFS not in active flight session yet
    - SimConnect DLL missing/mismatch
 

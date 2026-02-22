@@ -1,1 +1,3 @@
-# Put Microsoft.FlightSimulator.SimConnect.dll in this folder.
+# Put both files in this folder:
+# - Microsoft.FlightSimulator.SimConnect.dll
+# - SimConnect.dll
