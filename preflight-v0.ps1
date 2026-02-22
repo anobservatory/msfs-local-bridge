@@ -69,7 +69,7 @@ $outputRoots = @(
 
 $existingOutput = $outputRoots | Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($null -eq $existingOutput) {
-  Write-Check -Status WARN -Message "No build output found yet (run dotnet build once)"
+  Write-Check -Status PASS -Message "No build output found yet (normal before first run)"
 }
 else {
   $managedOut = Join-Path $existingOutput "Microsoft.FlightSimulator.SimConnect.dll"
@@ -115,12 +115,34 @@ foreach ($root in $uninstallRoots) {
     }
 }
 
-if ($vcEntries.Count -gt 0) {
-  $vcVersion = ($vcEntries | Select-Object -First 1).DisplayVersion
-  Write-Check -Status PASS -Message "Visual C++ Redistributable found (version: $vcVersion)"
+$vcRuntimeKeyPaths = @(
+  "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64",
+  "HKLM:\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\x64"
+)
+
+$vcRuntimeDetected = $false
+$vcRuntimeVersion = $null
+
+foreach ($keyPath in $vcRuntimeKeyPaths) {
+  $runtimeEntry = Get-ItemProperty -Path $keyPath -ErrorAction SilentlyContinue
+  if ($null -ne $runtimeEntry -and $runtimeEntry.Installed -eq 1) {
+    $vcRuntimeDetected = $true
+    $vcRuntimeVersion = $runtimeEntry.Version
+    break
+  }
+}
+
+if ($vcEntries.Count -gt 0 -or $vcRuntimeDetected) {
+  if ($vcEntries.Count -gt 0) {
+    $vcVersion = ($vcEntries | Select-Object -First 1).DisplayVersion
+    Write-Check -Status PASS -Message "Visual C++ Redistributable found (version: $vcVersion)"
+  }
+  else {
+    Write-Check -Status PASS -Message "Visual C++ Redistributable runtime detected (version: $vcRuntimeVersion)"
+  }
 }
 else {
-  Write-Check -Status WARN -Message "Visual C++ Redistributable (x64) not detected"
+  Write-Check -Status WARN -Message "Visual C++ Redistributable (x64) not detected (bridge can still work if already present by policy/runtime image)"
 }
 
 $portLines = @(netstat -ano | Select-String ":$Port")

@@ -122,6 +122,10 @@ npm run dev
 6. `Application Control policy has blocked this file (0x800711C7)`:
    - right-click zip -> Properties -> Unblock before extract
    - or run in a folder excluded from strict organization policy
+7. `preflight-v0.ps1` shows `No build output found yet`:
+   - this is normal before first `dotnet run`
+8. `preflight-v0.ps1` cannot detect Visual C++ redistributable but bridge runs:
+   - treat as non-blocking warning when SimConnect actually connects
 
 ## 8) Optional runtime env vars
 
