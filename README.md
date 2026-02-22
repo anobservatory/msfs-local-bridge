@@ -155,3 +155,18 @@ Output:
 `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.1.0.zip`
 
 This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `run-bridge.ps1`, `preflight-v0.ps1`, `README.md`) needed by testers.
+
+## 10) Version Tagging Rule (Release)
+
+Use a semantic git tag and matching package version:
+
+1. Git tag format: `vMAJOR.MINOR.PATCH` (example: `v0.1.0`)
+2. Publish argument: `.\publish-v0.ps1 -Version 0.1.0`
+3. Output package: `msfs-local-bridge-v0.1.0.zip`
+
+Release command example:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
