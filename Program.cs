@@ -308,6 +308,9 @@ internal sealed class SimConnectOwnshipService : BackgroundService
 
   protected override async Task ExecuteAsync(CancellationToken stoppingToken)
   {
+    // Ensure host startup can complete even when SimConnect connects immediately.
+    await Task.Yield();
+
     while (!stoppingToken.IsCancellationRequested)
     {
       if (!EnsureConnected())
@@ -320,6 +323,8 @@ internal sealed class SimConnectOwnshipService : BackgroundService
       {
         _messageSignal?.WaitOne(_options.SimConnectPollMs);
         _simConnect?.ReceiveMessage();
+        // Keep this loop cooperative so startup/shutdown remain responsive.
+        await Task.Yield();
       }
       catch (COMException ex)
       {
