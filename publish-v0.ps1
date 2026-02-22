@@ -52,6 +52,7 @@ New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
 Copy-Item (Join-Path $publishDir "*") $packageRoot -Recurse -Force
 Copy-Item (Join-Path $projectRoot "README.md") (Join-Path $packageRoot "README.md") -Force
 Copy-Item (Join-Path $projectRoot "run-bridge.ps1") (Join-Path $packageRoot "run-bridge.ps1") -Force
+Copy-Item (Join-Path $projectRoot "preflight-v0.ps1") (Join-Path $packageRoot "preflight-v0.ps1") -Force
 
 Compress-Archive -Path "$packageRoot\*" -DestinationPath $zipPath -Force
 
@@ -61,5 +62,6 @@ Write-Host "ZIP: $zipPath"
 Write-Host ""
 Write-Host "Quick verify:" -ForegroundColor Yellow
 Write-Host "  1) Extract zip"
-Write-Host "  2) Run .\run-bridge.ps1"
-Write-Host "  3) Confirm netstat -ano | findstr "":39000"""
+Write-Host "  2) Run .\preflight-v0.ps1"
+Write-Host "  3) Run .\run-bridge.ps1"
+Write-Host "  4) Confirm netstat -ano | findstr "":39000"""
