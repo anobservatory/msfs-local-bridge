@@ -119,12 +119,15 @@ npm run dev
 5. Bridge starts but no ownship:
    - MSFS not in active flight session yet
    - SimConnect DLL missing/mismatch
-6. `Application Control policy has blocked this file (0x800711C7)`:
+6. `Waiting for MSFS + SimConnect... COMException (0x80004005 / E_FAIL)` repeats during startup:
+   - expected while MSFS is still loading or not in an active flight
+   - if it continues for more than 2 minutes after cockpit load, then investigate
+7. `Application Control policy has blocked this file (0x800711C7)`:
    - right-click zip -> Properties -> Unblock before extract
    - or run in a folder excluded from strict organization policy
-7. `preflight-v0.ps1` shows `No build output found yet`:
+8. `preflight-v0.ps1` shows `No build output found yet`:
    - this is normal before first `dotnet run`
-8. `preflight-v0.ps1` cannot detect Visual C++ redistributable but bridge runs:
+9. `preflight-v0.ps1` cannot detect Visual C++ redistributable but bridge runs:
    - treat as non-blocking warning when SimConnect actually connects
 
 ## 8) Optional runtime env vars
