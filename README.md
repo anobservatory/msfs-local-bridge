@@ -121,3 +121,18 @@ Defaults are safe for first run.
 - `MSFS_BRIDGE_SAMPLE_MS` default: `200`
 - `MSFS_BRIDGE_POLL_MS` default: `25`
 - `MSFS_BRIDGE_RECONNECT_MS` default: `2000`
+
+## 9) V0 Package Build (Operator)
+
+Build portable release zip:
+
+```powershell
+cd tools\msfs-local-bridge
+.\publish-v0.ps1 -Version 0.1.0
+```
+
+Output:
+
+`tools/msfs-local-bridge/dist/msfs-local-bridge-v0.1.0.zip`
+
+This package excludes source `bin/obj` clutter and includes runtime bridge files needed by testers.
