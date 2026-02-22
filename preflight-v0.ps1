@@ -62,6 +62,17 @@ $nativeDll = Join-Path $PSScriptRoot "lib\SimConnect.dll"
 Test-RequiredFile -Path $managedDll -Label "Managed SimConnect DLL"
 Test-RequiredFile -Path $nativeDll -Label "Native SimConnect DLL"
 
+$projectFile = Join-Path $PSScriptRoot "MsfsLocalBridge.csproj"
+$releaseExe = Join-Path $PSScriptRoot "MsfsLocalBridge.exe"
+$releaseLayout = (Test-Path $releaseExe) -and (-not (Test-Path $projectFile))
+
+if ($releaseLayout) {
+  $managedRootDll = Join-Path $PSScriptRoot "Microsoft.FlightSimulator.SimConnect.dll"
+  $nativeRootDll = Join-Path $PSScriptRoot "SimConnect.dll"
+  Test-RequiredFile -Path $managedRootDll -Label "Release root managed SimConnect DLL"
+  Test-RequiredFile -Path $nativeRootDll -Label "Release root native SimConnect DLL"
+}
+
 $outputRoots = @(
   (Join-Path $PSScriptRoot "bin\Debug\net8.0-windows\win-x64"),
   (Join-Path $PSScriptRoot "bin\Release\net8.0-windows\win-x64")

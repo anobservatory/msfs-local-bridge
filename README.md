@@ -12,7 +12,7 @@ This bridge is the real SimConnect sender.
 ## 0) 5-step quick start (Tester)
 
 1. Extract `msfs-local-bridge-v0.x.x.zip` on Windows.
-2. Place both SimConnect DLL files in `lib/`.
+2. Verify both SimConnect DLL files exist in package root and `lib/`.
 3. Run `.\preflight-v0.ps1` and fix all `FAIL` items.
 4. Run `.\run-bridge.ps1` and keep the terminal open.
 5. On Mac, set `VITE_MSFS_BRIDGE_URL` and choose `Display -> MSFS Local`.
@@ -27,9 +27,9 @@ This bridge is the real SimConnect sender.
 4. Visual C++ Redistributable (x64)
    - Microsoft Visual C++ 2015-2022 Redistributable (x64)
 
-## 2) Put SimConnect DLLs in this project
+## 2) SimConnect DLL placement
 
-Copy both files into:
+For source builds, copy both files into:
 
 `tools/msfs-local-bridge/lib/`
 
@@ -44,6 +44,11 @@ If you do not know where the DLL is, search in PowerShell:
 Get-ChildItem -Path "C:\" -Filter "Microsoft.FlightSimulator.SimConnect.dll" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 5 FullName
 Get-ChildItem -Path "C:\" -Filter "SimConnect.dll" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 10 FullName
 ```
+
+Release package note:
+
+- `msfs-local-bridge-vX.Y.Z.zip` should already contain both DLLs in root and `lib/`.
+- If runtime reports root DLL missing, copy from `lib/` to root once.
 
 ## 3) Preflight + run bridge on Windows
 
@@ -129,6 +134,9 @@ npm run dev
    - this is normal before first `dotnet run`
 9. `preflight-v0.ps1` cannot detect Visual C++ redistributable but bridge runs:
    - treat as non-blocking warning when SimConnect actually connects
+10. Runtime says `Could not load ... Microsoft.FlightSimulator.SimConnect.dll` in release zip:
+   - confirm both DLLs exist in package root
+   - quick fix: copy both DLLs from `lib/` to package root
 
 ## 8) Optional runtime env vars
 

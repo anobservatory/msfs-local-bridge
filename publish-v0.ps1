@@ -54,6 +54,15 @@ Copy-Item (Join-Path $projectRoot "README.md") (Join-Path $packageRoot "README.m
 Copy-Item (Join-Path $projectRoot "run-bridge.ps1") (Join-Path $packageRoot "run-bridge.ps1") -Force
 Copy-Item (Join-Path $projectRoot "preflight-v0.ps1") (Join-Path $packageRoot "preflight-v0.ps1") -Force
 
+# Ensure SimConnect DLLs exist both in root (runtime load path) and lib (diagnostics/reference).
+Copy-Item $managedDll (Join-Path $packageRoot "Microsoft.FlightSimulator.SimConnect.dll") -Force
+Copy-Item $nativeDll (Join-Path $packageRoot "SimConnect.dll") -Force
+
+$packageLibDir = Join-Path $packageRoot "lib"
+New-Item -ItemType Directory -Path $packageLibDir -Force | Out-Null
+Copy-Item $managedDll (Join-Path $packageLibDir "Microsoft.FlightSimulator.SimConnect.dll") -Force
+Copy-Item $nativeDll (Join-Path $packageLibDir "SimConnect.dll") -Force
+
 Compress-Archive -Path "$packageRoot\*" -DestinationPath $zipPath -Force
 
 Write-Host ""
