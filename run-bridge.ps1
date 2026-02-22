@@ -21,4 +21,26 @@ Write-Host "  ws://$BindHost`:$Port$StreamPath"
 Write-Host "Press Ctrl+C to stop."
 Write-Host ""
 
-dotnet run --project "$PSScriptRoot\MsfsLocalBridge.csproj"
+$exePath = Join-Path $PSScriptRoot "MsfsLocalBridge.exe"
+$dllPath = Join-Path $PSScriptRoot "MsfsLocalBridge.dll"
+$projectPath = Join-Path $PSScriptRoot "MsfsLocalBridge.csproj"
+
+# Prefer release executable when present (packaged zip scenario).
+if (Test-Path $exePath) {
+  & $exePath
+  exit $LASTEXITCODE
+}
+
+# Fallback to source project execution.
+if (Test-Path $projectPath) {
+  dotnet run --project $projectPath
+  exit $LASTEXITCODE
+}
+
+# Last fallback for runtime-only directory without project file.
+if (Test-Path $dllPath) {
+  dotnet $dllPath
+  exit $LASTEXITCODE
+}
+
+throw "No runnable bridge target found. Expected one of: MsfsLocalBridge.exe, MsfsLocalBridge.csproj, MsfsLocalBridge.dll"
