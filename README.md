@@ -25,6 +25,20 @@ This bridge is the real SimConnect sender.
 3. Elevation is reserved for explicit repair actions only.
 4. Use `.\repair-elevated-v0.ps1` for approved elevated repair actions.
 
+## 0.2) One-click diagnostics (V1 baseline)
+
+Run diagnostics in text mode:
+
+```powershell
+.\diagnostics-v0.ps1
+```
+
+Run diagnostics in JSON mode:
+
+```powershell
+.\diagnostics-v0.ps1 -Format Json
+```
+
 ## 1) Prerequisites (Windows PC)
 
 1. MSFS 2020 or 2024 installed.
@@ -133,6 +147,12 @@ Optional elevated repair helper:
 .\repair-elevated-v0.ps1 -Action RemoveFirewall39000
 ```
 
+Quick diagnostics helper:
+
+```powershell
+.\diagnostics-v0.ps1
+```
+
 ## 7) Common problems
 
 1. `39000` is occupied by `node.exe`: old mock process is running.
@@ -192,7 +212,7 @@ Output:
 
 `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.1.0.zip`
 
-This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `run-bridge.ps1`, `preflight-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`) needed by testers.
+This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `run-bridge.ps1`, `preflight-v0.ps1`, `diagnostics-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`) needed by testers.
 
 ## 10) Version Tagging Rule (Release)
 
