@@ -11,7 +11,7 @@ This bridge is the real SimConnect sender.
 
 ## 0) 6-step quick start (Tester)
 
-1. Extract `msfs-local-bridge-v0.x.x.zip` on Windows.
+1. Extract `msfs-local-bridge-vX.Y.Z-self-contained.zip` on Windows (recommended).
 2. Verify both SimConnect DLL files exist in package root and `lib/`.
 3. Open normal PowerShell (not `Run as administrator`).
 4. Run `.\preflight-v0.ps1` and fix all `FAIL` items.
@@ -69,7 +69,8 @@ Get-ChildItem -Path "C:\" -Filter "SimConnect.dll" -Recurse -ErrorAction Silentl
 
 Release package note:
 
-- `msfs-local-bridge-vX.Y.Z.zip` should already contain both DLLs in root and `lib/`.
+- `msfs-local-bridge-vX.Y.Z-self-contained.zip` should already contain both DLLs in root and `lib/`.
+- `msfs-local-bridge-vX.Y.Z-lite.zip` should also contain both DLLs in root and `lib/`.
 - If runtime reports root DLL missing, copy from `lib/` to root once.
 - Release zip is `win-x64 self-contained`, so testers do not need .NET runtime/SDK.
 
@@ -207,18 +208,24 @@ Reconnect policy baseline:
 
 ## 9) V0 Package Build (Operator)
 
-Build portable release zip:
+Build portable release zip (recommended self-contained):
 
 ```powershell
 cd tools\msfs-local-bridge
-.\publish-v0.ps1 -Version 0.1.0
+.\publish-v0.ps1 -Version 0.1.0 -Package self-contained
 ```
 
-`publish-v0.ps1` defaults to `--self-contained true` for `win-x64`.
+Build lite zip (.NET required on tester machine):
+
+```powershell
+cd tools\msfs-local-bridge
+.\publish-v0.ps1 -Version 0.1.0 -Package lite
+```
 
 Output:
 
-`tools/msfs-local-bridge/dist/msfs-local-bridge-v0.1.0.zip`
+- `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.1.0-self-contained.zip`
+- `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.1.0-lite.zip`
 
 This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `run-bridge.ps1`, `preflight-v0.ps1`, `diagnostics-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`) needed by testers.
 
@@ -227,8 +234,12 @@ This package excludes source `bin/obj` clutter and includes runtime bridge files
 Use a semantic git tag and matching package version:
 
 1. Git tag format: `vMAJOR.MINOR.PATCH` (example: `v0.1.0`)
-2. Publish argument: `.\publish-v0.ps1 -Version 0.1.0`
-3. Output package: `msfs-local-bridge-v0.1.0.zip`
+2. Publish arguments:
+   - `.\publish-v0.ps1 -Version 0.1.0 -Package self-contained`
+   - `.\publish-v0.ps1 -Version 0.1.0 -Package lite`
+3. Output packages:
+   - `msfs-local-bridge-v0.1.0-self-contained.zip`
+   - `msfs-local-bridge-v0.1.0-lite.zip`
 
 Release command example:
 

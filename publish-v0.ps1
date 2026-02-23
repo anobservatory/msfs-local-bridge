@@ -1,16 +1,19 @@
 param(
   [string]$Version = "0.1.0",
   [string]$Configuration = "Release",
-  [switch]$SelfContained = $true
+  [ValidateSet("self-contained", "lite")]
+  [string]$Package = "self-contained"
 )
 
 $ErrorActionPreference = "Stop"
 
 $projectRoot = $PSScriptRoot
 $projectFile = Join-Path $projectRoot "MsfsLocalBridge.csproj"
+$isSelfContained = $Package -eq "self-contained"
+$packageName = "msfs-local-bridge-v$Version-$Package"
 $publishDir = Join-Path $projectRoot "dist\publish\win-x64"
-$packageRoot = Join-Path $projectRoot "dist\package\msfs-local-bridge-v$Version"
-$zipPath = Join-Path $projectRoot "dist\msfs-local-bridge-v$Version.zip"
+$packageRoot = Join-Path $projectRoot "dist\package\$packageName"
+$zipPath = Join-Path $projectRoot "dist\$packageName.zip"
 
 $managedDll = Join-Path $projectRoot "lib\Microsoft.FlightSimulator.SimConnect.dll"
 $nativeDll = Join-Path $projectRoot "lib\SimConnect.dll"
@@ -29,7 +32,8 @@ if (-not (Test-Path $nativeDll)) {
 
 Write-Host "Publishing msfs-local-bridge v$Version..." -ForegroundColor Cyan
 Write-Host "  runtime: win-x64"
-Write-Host "  self-contained: $SelfContained"
+Write-Host "  package: $Package"
+Write-Host "  self-contained: $isSelfContained"
 
 if (Test-Path $publishDir) {
   Remove-Item $publishDir -Recurse -Force
@@ -46,7 +50,7 @@ if (Test-Path $zipPath) {
 dotnet publish $projectFile `
   -c $Configuration `
   -r win-x64 `
-  --self-contained $SelfContained `
+  --self-contained $isSelfContained `
   -o $publishDir
 
 New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
