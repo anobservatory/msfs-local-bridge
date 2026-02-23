@@ -44,6 +44,17 @@ function Test-RequiredFile {
   }
 }
 
+function Test-IsAdministrator {
+  try {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  }
+  catch {
+    return $false
+  }
+}
+
 Write-Host "MSFS Local Bridge v0 Preflight" -ForegroundColor Cyan
 Write-Host "Project: $PSScriptRoot"
 Write-Host ""
@@ -111,6 +122,14 @@ if ([Environment]::Is64BitProcess) {
 }
 else {
   Write-Check -Status WARN -Message "PowerShell process is not x64 (use x64 shell)"
+}
+
+$isAdmin = Test-IsAdministrator
+if ($isAdmin) {
+  Write-Check -Status WARN -Message "PowerShell is running elevated. Normal bridge operation should run as standard user."
+}
+else {
+  Write-Check -Status PASS -Message "PowerShell is running as standard user (recommended)"
 }
 
 $vcDisplayNames = @(

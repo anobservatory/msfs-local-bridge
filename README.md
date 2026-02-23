@@ -9,13 +9,20 @@ This folder contains a Windows console bridge:
 If you are flying at KJFK but the app shows a fixed C172 around KSFO, that usually means a mock sender is running.  
 This bridge is the real SimConnect sender.
 
-## 0) 5-step quick start (Tester)
+## 0) 6-step quick start (Tester)
 
 1. Extract `msfs-local-bridge-v0.x.x.zip` on Windows.
 2. Verify both SimConnect DLL files exist in package root and `lib/`.
-3. Run `.\preflight-v0.ps1` and fix all `FAIL` items.
-4. Run `.\run-bridge.ps1` and keep the terminal open.
-5. On Mac, set `VITE_MSFS_BRIDGE_URL` and choose `Display -> MSFS Local`.
+3. Open normal PowerShell (not `Run as administrator`).
+4. Run `.\preflight-v0.ps1` and fix all `FAIL` items.
+5. Run `.\run-bridge.ps1` and keep the terminal open.
+6. On Mac, set `VITE_MSFS_BRIDGE_URL` and choose `Display -> MSFS Local`.
+
+## 0.1) Privilege policy (V1 baseline)
+
+1. Default runtime mode is standard user.
+2. Administrator mode is not required for normal bridge operation.
+3. Elevation is reserved for explicit repair actions only.
 
 ## 1) Prerequisites (Windows PC)
 
@@ -146,6 +153,9 @@ npm run dev
 10. Runtime says `Could not load ... Microsoft.FlightSimulator.SimConnect.dll` in release zip:
    - confirm both DLLs exist in package root
    - quick fix: copy both DLLs from `lib/` to package root
+11. Running bridge as Administrator by default:
+   - not required for normal sync
+   - use standard user shell unless a specific repair action requests elevation
 
 ## 8) Optional runtime env vars
 

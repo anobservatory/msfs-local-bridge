@@ -9,12 +9,33 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Test-IsAdministrator {
+  try {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  }
+  catch {
+    return $false
+  }
+}
+
 $env:MSFS_BRIDGE_BIND = "$BindHost"
 $env:MSFS_BRIDGE_PORT = "$Port"
 $env:MSFS_BRIDGE_PATH = "$StreamPath"
 $env:MSFS_BRIDGE_SAMPLE_MS = "$SampleIntervalMs"
 $env:MSFS_BRIDGE_POLL_MS = "$PollIntervalMs"
 $env:MSFS_BRIDGE_RECONNECT_MS = "$ReconnectDelayMs"
+
+$isAdmin = Test-IsAdministrator
+if ($isAdmin) {
+  Write-Host "[WARN] Running as Administrator." -ForegroundColor Yellow
+  Write-Host "[WARN] Normal bridge usage should run as a standard user." -ForegroundColor Yellow
+  Write-Host "[WARN] Keep elevated mode only for explicit repair actions." -ForegroundColor Yellow
+}
+else {
+  Write-Host "[PASS] Running as standard user (recommended)." -ForegroundColor Green
+}
 
 Write-Host "Starting MSFS Local Bridge..."
 Write-Host "  ws://$BindHost`:$Port$StreamPath"
