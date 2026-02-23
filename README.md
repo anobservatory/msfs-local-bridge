@@ -23,6 +23,7 @@ This bridge is the real SimConnect sender.
 1. Default runtime mode is standard user.
 2. Administrator mode is not required for normal bridge operation.
 3. Elevation is reserved for explicit repair actions only.
+4. Use `.\repair-elevated-v0.ps1` for approved elevated repair actions.
 
 ## 1) Prerequisites (Windows PC)
 
@@ -124,6 +125,14 @@ npm run dev
 2. Allow inbound TCP `39000` on Windows (Private network).
 3. Keep bridge terminal open while flying.
 
+Optional elevated repair helper:
+
+```powershell
+.\repair-elevated-v0.ps1 -Action ShowFirewall39000
+.\repair-elevated-v0.ps1 -Action OpenFirewall39000
+.\repair-elevated-v0.ps1 -Action RemoveFirewall39000
+```
+
 ## 7) Common problems
 
 1. `39000` is occupied by `node.exe`: old mock process is running.
@@ -183,7 +192,7 @@ Output:
 
 `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.1.0.zip`
 
-This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `run-bridge.ps1`, `preflight-v0.ps1`, `README.md`) needed by testers.
+This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `run-bridge.ps1`, `preflight-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`) needed by testers.
 
 ## 10) Version Tagging Rule (Release)
 

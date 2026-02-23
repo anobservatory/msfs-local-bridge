@@ -56,6 +56,7 @@ Copy-Item (Join-Path $publishDir "*") $packageRoot -Recurse -Force
 Copy-Item (Join-Path $projectRoot "README.md") (Join-Path $packageRoot "README.md") -Force
 Copy-Item (Join-Path $projectRoot "run-bridge.ps1") (Join-Path $packageRoot "run-bridge.ps1") -Force
 Copy-Item (Join-Path $projectRoot "preflight-v0.ps1") (Join-Path $packageRoot "preflight-v0.ps1") -Force
+Copy-Item (Join-Path $projectRoot "repair-elevated-v0.ps1") (Join-Path $packageRoot "repair-elevated-v0.ps1") -Force
 
 # Ensure SimConnect DLLs exist both in root (runtime load path) and lib (diagnostics/reference).
 Copy-Item $managedDll (Join-Path $packageRoot "Microsoft.FlightSimulator.SimConnect.dll") -Force
