@@ -48,14 +48,6 @@ Write-Host "MSFS Local Bridge v0 Preflight" -ForegroundColor Cyan
 Write-Host "Project: $PSScriptRoot"
 Write-Host ""
 
-$dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
-if ($null -eq $dotnet) {
-  Write-Check -Status FAIL -Message "dotnet SDK not found in PATH"
-}
-else {
-  Write-Check -Status PASS -Message "dotnet found: $($dotnet.Source)"
-}
-
 $managedDll = Join-Path $PSScriptRoot "lib\Microsoft.FlightSimulator.SimConnect.dll"
 $nativeDll = Join-Path $PSScriptRoot "lib\SimConnect.dll"
 
@@ -65,6 +57,24 @@ Test-RequiredFile -Path $nativeDll -Label "Native SimConnect DLL"
 $projectFile = Join-Path $PSScriptRoot "MsfsLocalBridge.csproj"
 $releaseExe = Join-Path $PSScriptRoot "MsfsLocalBridge.exe"
 $releaseLayout = (Test-Path $releaseExe) -and (-not (Test-Path $projectFile))
+
+$dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
+if ($releaseLayout) {
+  if ($null -eq $dotnet) {
+    Write-Check -Status PASS -Message "dotnet not found (expected for self-contained release usage)"
+  }
+  else {
+    Write-Check -Status PASS -Message "dotnet found (optional for self-contained release): $($dotnet.Source)"
+  }
+}
+else {
+  if ($null -eq $dotnet) {
+    Write-Check -Status FAIL -Message "dotnet SDK not found in PATH (required for source build layout)"
+  }
+  else {
+    Write-Check -Status PASS -Message "dotnet found: $($dotnet.Source)"
+  }
+}
 
 if ($releaseLayout) {
   $managedRootDll = Join-Path $PSScriptRoot "Microsoft.FlightSimulator.SimConnect.dll"
@@ -80,7 +90,7 @@ $outputRoots = @(
 
 $existingOutput = $outputRoots | Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($null -eq $existingOutput) {
-  Write-Check -Status PASS -Message "No build output found yet (normal before first run)"
+  Write-Check -Status PASS -Message "No build output found yet (normal before first source run or when using release zip)"
 }
 else {
   $managedOut = Join-Path $existingOutput "Microsoft.FlightSimulator.SimConnect.dll"

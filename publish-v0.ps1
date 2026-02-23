@@ -1,6 +1,7 @@
 param(
   [string]$Version = "0.1.0",
-  [string]$Configuration = "Release"
+  [string]$Configuration = "Release",
+  [switch]$SelfContained = $true
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,6 +28,8 @@ if (-not (Test-Path $nativeDll)) {
 }
 
 Write-Host "Publishing msfs-local-bridge v$Version..." -ForegroundColor Cyan
+Write-Host "  runtime: win-x64"
+Write-Host "  self-contained: $SelfContained"
 
 if (Test-Path $publishDir) {
   Remove-Item $publishDir -Recurse -Force
@@ -43,7 +46,7 @@ if (Test-Path $zipPath) {
 dotnet publish $projectFile `
   -c $Configuration `
   -r win-x64 `
-  --self-contained false `
+  --self-contained $SelfContained `
   -o $publishDir
 
 New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null

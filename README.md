@@ -20,7 +20,7 @@ This bridge is the real SimConnect sender.
 ## 1) Prerequisites (Windows PC)
 
 1. MSFS 2020 or 2024 installed.
-2. `.NET 8 SDK` installed.
+2. `.NET 8 SDK` installed (source-build workflow only).
 3. SimConnect DLLs available:
    - `Microsoft.FlightSimulator.SimConnect.dll` (managed wrapper)
    - `SimConnect.dll` (native runtime)
@@ -49,10 +49,19 @@ Release package note:
 
 - `msfs-local-bridge-vX.Y.Z.zip` should already contain both DLLs in root and `lib/`.
 - If runtime reports root DLL missing, copy from `lib/` to root once.
+- Release zip is `win-x64 self-contained`, so testers do not need .NET runtime/SDK.
 
 ## 3) Preflight + run bridge on Windows
 
-From repo root:
+Release zip (tester):
+
+```powershell
+cd <extracted-zip-folder>
+.\preflight-v0.ps1
+.\run-bridge.ps1
+```
+
+Source layout (developer):
 
 ```powershell
 cd tools\msfs-local-bridge
@@ -131,7 +140,7 @@ npm run dev
    - right-click zip -> Properties -> Unblock before extract
    - or run in a folder excluded from strict organization policy
 8. `preflight-v0.ps1` shows `No build output found yet`:
-   - this is normal before first `dotnet run`
+   - this is normal before first `dotnet run` or in release zip layout
 9. `preflight-v0.ps1` cannot detect Visual C++ redistributable but bridge runs:
    - treat as non-blocking warning when SimConnect actually connects
 10. Runtime says `Could not load ... Microsoft.FlightSimulator.SimConnect.dll` in release zip:
@@ -157,6 +166,8 @@ Build portable release zip:
 cd tools\msfs-local-bridge
 .\publish-v0.ps1 -Version 0.1.0
 ```
+
+`publish-v0.ps1` defaults to `--self-contained true` for `win-x64`.
 
 Output:
 
