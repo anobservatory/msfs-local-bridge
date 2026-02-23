@@ -4,7 +4,8 @@ param(
   [string]$StreamPath = "/stream",
   [int]$SampleIntervalMs = 200,
   [int]$PollIntervalMs = 25,
-  [int]$ReconnectDelayMs = 2000
+  [int]$ReconnectDelayMs = 2000,
+  [int]$ReconnectMaxDelayMs = 10000
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,6 +27,7 @@ $env:MSFS_BRIDGE_PATH = "$StreamPath"
 $env:MSFS_BRIDGE_SAMPLE_MS = "$SampleIntervalMs"
 $env:MSFS_BRIDGE_POLL_MS = "$PollIntervalMs"
 $env:MSFS_BRIDGE_RECONNECT_MS = "$ReconnectDelayMs"
+$env:MSFS_BRIDGE_RECONNECT_MAX_MS = "$ReconnectMaxDelayMs"
 
 $isAdmin = Test-IsAdministrator
 if ($isAdmin) {

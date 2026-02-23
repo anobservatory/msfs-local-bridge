@@ -195,7 +195,15 @@ Defaults are safe for first run.
 - `MSFS_BRIDGE_PATH` default: `/stream`
 - `MSFS_BRIDGE_SAMPLE_MS` default: `200`
 - `MSFS_BRIDGE_POLL_MS` default: `25`
-- `MSFS_BRIDGE_RECONNECT_MS` default: `2000`
+- `MSFS_BRIDGE_RECONNECT_MS` default: `2000` (initial reconnect delay)
+- `MSFS_BRIDGE_RECONNECT_MAX_MS` default: `10000` (backoff ceiling)
+
+Reconnect policy baseline:
+
+1. Initial reconnect delay starts at `MSFS_BRIDGE_RECONNECT_MS`.
+2. Delay doubles on repeated connect failures.
+3. Delay is capped by `MSFS_BRIDGE_RECONNECT_MAX_MS`.
+4. Delay resets to initial value after a successful SimConnect reconnect.
 
 ## 9) V0 Package Build (Operator)
 

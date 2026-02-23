@@ -159,6 +159,7 @@ internal sealed class BridgeOptions
   public int SampleIntervalMs { get; }
   public int SimConnectPollMs { get; }
   public int ReconnectDelayMs { get; }
+  public int ReconnectMaxDelayMs { get; }
 
   private BridgeOptions(
     string bindHost,
@@ -166,7 +167,8 @@ internal sealed class BridgeOptions
     string streamPath,
     int sampleIntervalMs,
     int simConnectPollMs,
-    int reconnectDelayMs
+    int reconnectDelayMs,
+    int reconnectMaxDelayMs
   )
   {
     BindHost = bindHost;
@@ -175,6 +177,7 @@ internal sealed class BridgeOptions
     SampleIntervalMs = sampleIntervalMs;
     SimConnectPollMs = simConnectPollMs;
     ReconnectDelayMs = reconnectDelayMs;
+    ReconnectMaxDelayMs = reconnectMaxDelayMs;
   }
 
   public static BridgeOptions FromEnvironment()
@@ -185,6 +188,8 @@ internal sealed class BridgeOptions
     var sampleIntervalMs = ReadInt("MSFS_BRIDGE_SAMPLE_MS", fallback: 200, min: 80, max: 2000);
     var simConnectPollMs = ReadInt("MSFS_BRIDGE_POLL_MS", fallback: 25, min: 5, max: 1000);
     var reconnectDelayMs = ReadInt("MSFS_BRIDGE_RECONNECT_MS", fallback: 2000, min: 500, max: 30000);
+    var reconnectMaxDelayMsRaw = ReadInt("MSFS_BRIDGE_RECONNECT_MAX_MS", fallback: 10000, min: 1000, max: 120000);
+    var reconnectMaxDelayMs = Math.Max(reconnectDelayMs, reconnectMaxDelayMsRaw);
 
     return new BridgeOptions(
       bindHost: bindHost,
@@ -192,7 +197,8 @@ internal sealed class BridgeOptions
       streamPath: streamPath,
       sampleIntervalMs: sampleIntervalMs,
       simConnectPollMs: simConnectPollMs,
-      reconnectDelayMs: reconnectDelayMs
+      reconnectDelayMs: reconnectDelayMs,
+      reconnectMaxDelayMs: reconnectMaxDelayMs
     );
   }
 
@@ -311,13 +317,23 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     // Ensure host startup can complete even when SimConnect connects immediately.
     await Task.Yield();
 
+    var reconnectDelayMs = _options.ReconnectDelayMs;
+
     while (!stoppingToken.IsCancellationRequested)
     {
       if (!EnsureConnected())
       {
-        await Task.Delay(_options.ReconnectDelayMs, stoppingToken);
+        _logger.LogDebug(
+          "SimConnect reconnect retry in {DelayMs}ms (max {MaxDelayMs}ms).",
+          reconnectDelayMs,
+          _options.ReconnectMaxDelayMs
+        );
+        await Task.Delay(reconnectDelayMs, stoppingToken);
+        reconnectDelayMs = Math.Min(_options.ReconnectMaxDelayMs, reconnectDelayMs * 2);
         continue;
       }
+
+      reconnectDelayMs = _options.ReconnectDelayMs;
 
       try
       {
