@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net.WebSockets;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -64,6 +65,18 @@ app.Map(bridgeOptions.StreamPath, async (
           source = "msfs_local",
           version = 1,
           ts = snapshot.TimestampMs,
+          sessionMeta = new
+          {
+            hasPairedDevice = true,
+            hasAnySession = true,
+            deviceId = options.DeviceId,
+            deviceName = options.DeviceName,
+            companionVersion = options.CompanionVersion,
+            simPlatform = options.SimPlatform,
+            simVersion = snapshot.SimVersionLabel,
+            lastHeartbeatAtMs = snapshot.TimestampMs,
+            lastTelemetryAtMs = snapshot.TimestampMs,
+          },
           ownship = new
           {
             id = snapshot.Id,
@@ -160,6 +173,11 @@ internal sealed class BridgeOptions
   public int SimConnectPollMs { get; }
   public int ReconnectDelayMs { get; }
   public int ReconnectMaxDelayMs { get; }
+  public string DeviceName { get; }
+  public string DeviceId { get; }
+  public string CompanionVersion { get; }
+  public string SimPlatform { get; }
+  public string SimVersionFallback { get; }
 
   private BridgeOptions(
     string bindHost,
@@ -168,7 +186,12 @@ internal sealed class BridgeOptions
     int sampleIntervalMs,
     int simConnectPollMs,
     int reconnectDelayMs,
-    int reconnectMaxDelayMs
+    int reconnectMaxDelayMs,
+    string deviceName,
+    string deviceId,
+    string companionVersion,
+    string simPlatform,
+    string simVersionFallback
   )
   {
     BindHost = bindHost;
@@ -178,6 +201,11 @@ internal sealed class BridgeOptions
     SimConnectPollMs = simConnectPollMs;
     ReconnectDelayMs = reconnectDelayMs;
     ReconnectMaxDelayMs = reconnectMaxDelayMs;
+    DeviceName = deviceName;
+    DeviceId = deviceId;
+    CompanionVersion = companionVersion;
+    SimPlatform = simPlatform;
+    SimVersionFallback = simVersionFallback;
   }
 
   public static BridgeOptions FromEnvironment()
@@ -190,6 +218,11 @@ internal sealed class BridgeOptions
     var reconnectDelayMs = ReadInt("MSFS_BRIDGE_RECONNECT_MS", fallback: 2000, min: 500, max: 30000);
     var reconnectMaxDelayMsRaw = ReadInt("MSFS_BRIDGE_RECONNECT_MAX_MS", fallback: 10000, min: 1000, max: 120000);
     var reconnectMaxDelayMs = Math.Max(reconnectDelayMs, reconnectMaxDelayMsRaw);
+    var deviceName = ReadString("MSFS_BRIDGE_DEVICE_NAME", Environment.MachineName);
+    var companionVersion = ReadString("MSFS_BRIDGE_COMPANION_VERSION", ResolveCompanionVersion());
+    var simPlatform = ReadString("MSFS_BRIDGE_SIM_PLATFORM", "msfs").ToLowerInvariant();
+    var simVersionFallback = ReadString("MSFS_BRIDGE_SIM_VERSION_FALLBACK", "Local Bridge");
+    var deviceId = NormalizeDeviceId(deviceName);
 
     return new BridgeOptions(
       bindHost: bindHost,
@@ -198,7 +231,12 @@ internal sealed class BridgeOptions
       sampleIntervalMs: sampleIntervalMs,
       simConnectPollMs: simConnectPollMs,
       reconnectDelayMs: reconnectDelayMs,
-      reconnectMaxDelayMs: reconnectMaxDelayMs
+      reconnectMaxDelayMs: reconnectMaxDelayMs,
+      deviceName: deviceName,
+      deviceId: deviceId,
+      companionVersion: companionVersion,
+      simPlatform: simPlatform,
+      simVersionFallback: simVersionFallback
     );
   }
 
@@ -243,12 +281,51 @@ internal sealed class BridgeOptions
 
     return trimmed;
   }
+
+  private static string NormalizeDeviceId(string deviceName)
+  {
+    var normalized = deviceName
+      .Trim()
+      .ToLowerInvariant()
+      .Replace(' ', '-');
+    if (normalized.Length == 0)
+    {
+      normalized = "windows-flight-device";
+    }
+    return $"local:{normalized}";
+  }
+
+  private static string ResolveCompanionVersion()
+  {
+    var entryAssembly = Assembly.GetEntryAssembly();
+    var informational = entryAssembly?
+      .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+      .InformationalVersion;
+    if (!string.IsNullOrWhiteSpace(informational))
+    {
+      var trimmed = informational.Trim();
+      var plusIndex = trimmed.IndexOf('+');
+      return plusIndex >= 0 ? trimmed[..plusIndex] : trimmed;
+    }
+
+    var version = entryAssembly?.GetName().Version;
+    if (version is not null)
+    {
+      var major = Math.Max(0, version.Major);
+      var minor = Math.Max(0, version.Minor);
+      var build = Math.Max(0, version.Build);
+      return $"{major}.{minor}.{build}";
+    }
+
+    return "0.1.x";
+  }
 }
 
 internal readonly record struct OwnshipSnapshot(
   string Id,
   string? Callsign,
   string? AircraftTitle,
+  string SimVersionLabel,
   double Lat,
   double Lon,
   double AltBaroFt,
@@ -300,6 +377,7 @@ internal sealed class SimConnectOwnshipService : BackgroundService
   private AutoResetEvent? _messageSignal;
   private bool _requestedOwnshipStream;
   private DateTimeOffset _lastConnectWarningAt = DateTimeOffset.MinValue;
+  private volatile string? _simApplicationName;
 
   public SimConnectOwnshipService(
     ILogger<SimConnectOwnshipService> logger,
@@ -442,12 +520,14 @@ internal sealed class SimConnectOwnshipService : BackgroundService
 
   private void OnRecvOpen(SimConnect sender, SIMCONNECT_RECV_OPEN data)
   {
+    _simApplicationName = NormalizeText(data.szApplicationName);
     _logger.LogInformation("SimConnect session opened: {Version}", data.szApplicationName);
     RequestOwnshipStream();
   }
 
   private void OnRecvQuit(SimConnect sender, SIMCONNECT_RECV data)
   {
+    _simApplicationName = null;
     _logger.LogWarning("MSFS session closed. Waiting for simulator restart...");
     Disconnect();
   }
@@ -474,6 +554,7 @@ internal sealed class SimConnectOwnshipService : BackgroundService
       Id: "msfs_ownship",
       Callsign: NormalizeText(ownship.AtcId),
       AircraftTitle: NormalizeText(ownship.Title),
+      SimVersionLabel: ResolveSimVersionLabel(_simApplicationName, _options.SimVersionFallback),
       Lat: ownship.LatitudeDeg,
       Lon: ownship.LongitudeDeg,
       AltBaroFt: ownship.IndicatedAltitudeFt,
@@ -499,6 +580,7 @@ internal sealed class SimConnectOwnshipService : BackgroundService
   private void DisconnectLocked()
   {
     _requestedOwnshipStream = false;
+    _simApplicationName = null;
 
     if (_simConnect is not null)
     {
@@ -548,6 +630,16 @@ internal sealed class SimConnectOwnshipService : BackgroundService
       normalized += 360.0;
     }
     return normalized;
+  }
+
+  private static string ResolveSimVersionLabel(string? applicationName, string fallback)
+  {
+    var normalized = NormalizeText(applicationName);
+    if (!string.IsNullOrWhiteSpace(normalized))
+    {
+      return normalized;
+    }
+    return fallback;
   }
 
   private enum DefinitionId : uint
