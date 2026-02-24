@@ -81,6 +81,7 @@ app.Map(bridgeOptions.StreamPath, async (
           {
             id = snapshot.Id,
             callsign = snapshot.Callsign,
+            tailNumber = snapshot.TailNumber,
             aircraftTitle = snapshot.AircraftTitle,
             squawk = snapshot.Squawk,
             lat = snapshot.Lat,
@@ -325,6 +326,7 @@ internal sealed class BridgeOptions
 internal readonly record struct OwnshipSnapshot(
   string Id,
   string? Callsign,
+  string? TailNumber,
   string? AircraftTitle,
   string? Squawk,
   string SimVersionLabel,
@@ -632,6 +634,7 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     var snapshot = new OwnshipSnapshot(
       Id: "msfs_ownship",
       Callsign: ResolveCallsign(ownship),
+      TailNumber: NormalizeText(ownship.AtcId),
       AircraftTitle: NormalizeText(ownship.Title),
       Squawk: FormatSquawk(ownship.TransponderCode),
       SimVersionLabel: ResolveSimVersionLabel(_simApplicationName, _options.SimVersionFallback),
@@ -700,10 +703,11 @@ internal sealed class SimConnectOwnshipService : BackgroundService
       return false;
     }
 
-    var nearZeroAltitude = Math.Abs(ownship.IndicatedAltitudeFt) <= 10 && Math.Abs(ownship.PlaneAltitudeFt) <= 10;
-    var nearZeroGroundSpeed = Math.Abs(ownship.GroundVelocityKt) <= 1;
-    var onGround = ownship.SimOnGround != 0;
-    return onGround && nearZeroAltitude && nearZeroGroundSpeed;
+    // Sim menu/teardown placeholders can report unstable on-ground flags.
+    // Treat low-altitude + low-speed telemetry near Null Island as invalid.
+    var lowAltitude = Math.Abs(ownship.IndicatedAltitudeFt) <= 1000 && Math.Abs(ownship.PlaneAltitudeFt) <= 1000;
+    var lowGroundSpeed = Math.Abs(ownship.GroundVelocityKt) <= 30;
+    return lowAltitude && lowGroundSpeed;
   }
 
   private static string? ResolveCallsign(OwnshipData ownship)
