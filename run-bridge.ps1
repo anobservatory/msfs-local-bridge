@@ -59,15 +59,17 @@ else {
 
 Write-Host "Starting MSFS Local Bridge..."
 Write-Host "  ws://$BindHost`:$Port$StreamPath"
-if (
-  $RelayEnabled
-  -or -not [string]::IsNullOrWhiteSpace($RelayUserId)
-  -or -not [string]::IsNullOrWhiteSpace($RelayPairCode)
+
+$hasRelayConfig =
+  $RelayEnabled `
+  -or (-not [string]::IsNullOrWhiteSpace($RelayUserId)) `
+  -or (-not [string]::IsNullOrWhiteSpace($RelayPairCode)) `
   -or (
-    -not [string]::IsNullOrWhiteSpace($RelayDeviceId)
-    -and -not [string]::IsNullOrWhiteSpace($RelayDeviceToken)
+    (-not [string]::IsNullOrWhiteSpace($RelayDeviceId)) `
+    -and (-not [string]::IsNullOrWhiteSpace($RelayDeviceToken))
   )
-) {
+
+if ($hasRelayConfig) {
   Write-Host "  relay: ENABLED ($RelayBaseUrl)"
 }
 else {
