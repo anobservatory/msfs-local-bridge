@@ -5,7 +5,16 @@ param(
   [int]$SampleIntervalMs = 200,
   [int]$PollIntervalMs = 25,
   [int]$ReconnectDelayMs = 2000,
-  [int]$ReconnectMaxDelayMs = 10000
+  [int]$ReconnectMaxDelayMs = 10000,
+  [switch]$RelayEnabled,
+  [string]$RelayBaseUrl = "https://anobservatory.com",
+  [string]$RelayUserId = "",
+  [string]$RelayPairCode = "",
+  [string]$RelayDeviceId = "",
+  [string]$RelayDeviceToken = "",
+  [string]$RelayCredentialsFile = "relay-credentials.json",
+  [int]$RelayLoopMs = 250,
+  [int]$RelayStopAfterNoTelemetrySec = 8
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,6 +37,15 @@ $env:MSFS_BRIDGE_SAMPLE_MS = "$SampleIntervalMs"
 $env:MSFS_BRIDGE_POLL_MS = "$PollIntervalMs"
 $env:MSFS_BRIDGE_RECONNECT_MS = "$ReconnectDelayMs"
 $env:MSFS_BRIDGE_RECONNECT_MAX_MS = "$ReconnectMaxDelayMs"
+$env:MSFS_RELAY_ENABLED = if ($RelayEnabled) { "1" } else { "0" }
+$env:MSFS_RELAY_BASE_URL = "$RelayBaseUrl"
+$env:MSFS_RELAY_USER_ID = "$RelayUserId"
+$env:MSFS_RELAY_PAIR_CODE = "$RelayPairCode"
+$env:MSFS_RELAY_DEVICE_ID = "$RelayDeviceId"
+$env:MSFS_RELAY_DEVICE_TOKEN = "$RelayDeviceToken"
+$env:MSFS_RELAY_CREDENTIALS_FILE = "$RelayCredentialsFile"
+$env:MSFS_RELAY_LOOP_MS = "$RelayLoopMs"
+$env:MSFS_RELAY_STOP_AFTER_NO_TELEMETRY_SEC = "$RelayStopAfterNoTelemetrySec"
 
 $isAdmin = Test-IsAdministrator
 if ($isAdmin) {
@@ -41,6 +59,20 @@ else {
 
 Write-Host "Starting MSFS Local Bridge..."
 Write-Host "  ws://$BindHost`:$Port$StreamPath"
+if (
+  $RelayEnabled
+  -or -not [string]::IsNullOrWhiteSpace($RelayUserId)
+  -or -not [string]::IsNullOrWhiteSpace($RelayPairCode)
+  -or (
+    -not [string]::IsNullOrWhiteSpace($RelayDeviceId)
+    -and -not [string]::IsNullOrWhiteSpace($RelayDeviceToken)
+  )
+) {
+  Write-Host "  relay: ENABLED ($RelayBaseUrl)"
+}
+else {
+  Write-Host "  relay: disabled (local-only mode)"
+}
 Write-Host "Press Ctrl+C to stop."
 Write-Host ""
 
