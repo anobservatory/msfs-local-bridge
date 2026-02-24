@@ -18,38 +18,6 @@ This bridge is the real SimConnect sender.
 5. Run `.\run-bridge.ps1` and keep the terminal open.
 6. On Mac, set `VITE_MSFS_BRIDGE_URL` and choose `Display -> MSFS Local`.
 
-## 0.3) Production relay mode (Mac + Windows split-device)
-
-Relay mode is required for `https://anobservatory.com` (production stream path).
-
-First run (with pair code):
-
-```powershell
-.\run-bridge.ps1 -RelayEnabled -RelayPairCode "A1B2-C3D4"
-```
-
-Optional scaffold pairing (dev-only user context):
-
-```powershell
-.\run-bridge.ps1 -RelayEnabled -RelayUserId "<user-id>"
-```
-
-Subsequent runs:
-
-```powershell
-.\run-bridge.ps1 -RelayEnabled
-```
-
-Relay credentials are persisted to:
-
-- `relay-credentials.json` (default, same folder)
-
-Override relay target:
-
-```powershell
-.\run-bridge.ps1 -RelayEnabled -RelayBaseUrl "https://anobservatory.com"
-```
-
 ## 0.0) Current release lock (v0.1.3)
 
 1. `msfs-local-bridge-v0.1.3-self-contained.zip` (recommended for testers)
