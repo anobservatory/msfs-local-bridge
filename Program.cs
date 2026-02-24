@@ -694,7 +694,7 @@ internal sealed class SimConnectOwnshipService : BackgroundService
   private static bool IsLikelyMenuPlaceholder(OwnshipData ownship)
   {
     // Menu/non-flight states can emit a zeroed telemetry placeholder near Null Island.
-    var nearNullIsland = Math.Abs(ownship.LatitudeDeg) <= 0.001 && Math.Abs(ownship.LongitudeDeg) <= 0.001;
+    var nearNullIsland = Math.Abs(ownship.LatitudeDeg) <= 0.05 && Math.Abs(ownship.LongitudeDeg) <= 0.05;
     if (!nearNullIsland)
     {
       return false;
@@ -712,14 +712,19 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     var flightNumber = NormalizeText(ownship.AtcFlightNumber);
     var atcId = NormalizeText(ownship.AtcId);
 
-    if (!string.IsNullOrWhiteSpace(atcId))
+    if (!string.IsNullOrWhiteSpace(airline) && !string.IsNullOrWhiteSpace(flightNumber))
     {
-      return atcId;
+      return $"{airline}{flightNumber}";
     }
 
     if (!string.IsNullOrWhiteSpace(airline))
     {
       return airline;
+    }
+
+    if (!string.IsNullOrWhiteSpace(atcId))
+    {
+      return atcId;
     }
 
     return flightNumber;
