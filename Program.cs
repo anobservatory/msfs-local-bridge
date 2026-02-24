@@ -82,6 +82,7 @@ app.Map(bridgeOptions.StreamPath, async (
             id = snapshot.Id,
             callsign = snapshot.Callsign,
             aircraftTitle = snapshot.AircraftTitle,
+            squawk = snapshot.Squawk,
             lat = snapshot.Lat,
             lon = snapshot.Lon,
             altBaroFt = snapshot.AltBaroFt,
@@ -325,6 +326,7 @@ internal readonly record struct OwnshipSnapshot(
   string Id,
   string? Callsign,
   string? AircraftTitle,
+  string? Squawk,
   string SimVersionLabel,
   double Lat,
   double Lon,
@@ -364,6 +366,14 @@ internal sealed class OwnshipSnapshotStore
       return true;
     }
   }
+
+  public void Clear()
+  {
+    lock (_gate)
+    {
+      _latest = null;
+    }
+  }
 }
 
 internal sealed class SimConnectOwnshipService : BackgroundService
@@ -376,6 +386,7 @@ internal sealed class SimConnectOwnshipService : BackgroundService
   private SimConnect? _simConnect;
   private AutoResetEvent? _messageSignal;
   private bool _requestedOwnshipStream;
+  private bool _simFlightActive;
   private DateTimeOffset _lastConnectWarningAt = DateTimeOffset.MinValue;
   private volatile string? _simApplicationName;
 
@@ -456,11 +467,14 @@ internal sealed class SimConnectOwnshipService : BackgroundService
         _simConnect = new SimConnect("AO MSFS Local Bridge", IntPtr.Zero, 0, _messageSignal, 0);
         _simConnect.OnRecvOpen += OnRecvOpen;
         _simConnect.OnRecvQuit += OnRecvQuit;
+        _simConnect.OnRecvEvent += OnRecvEvent;
         _simConnect.OnRecvException += OnRecvException;
         _simConnect.OnRecvSimobjectData += OnRecvSimobjectData;
 
         RegisterOwnshipDefinition(_simConnect);
+        RegisterSystemEvents(_simConnect);
         _requestedOwnshipStream = false;
+        _simFlightActive = false;
         _logger.LogInformation("Connected to SimConnect.");
         return true;
       }
@@ -490,14 +504,23 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "SIM ON GROUND", "bool", SIMCONNECT_DATATYPE.INT32, 0f, SimConnect.SIMCONNECT_UNUSED);
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "TITLE", null, SIMCONNECT_DATATYPE.STRING256, 0f, SimConnect.SIMCONNECT_UNUSED);
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "ATC ID", null, SIMCONNECT_DATATYPE.STRING64, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "ATC AIRLINE", null, SIMCONNECT_DATATYPE.STRING64, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "ATC FLIGHT NUMBER", null, SIMCONNECT_DATATYPE.STRING64, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "TRANSPONDER CODE:1", "number", SIMCONNECT_DATATYPE.INT32, 0f, SimConnect.SIMCONNECT_UNUSED);
     simConnect.RegisterDataDefineStruct<OwnshipData>(DefinitionId.Ownship);
+  }
+
+  private void RegisterSystemEvents(SimConnect simConnect)
+  {
+    simConnect.SubscribeToSystemEvent(EventId.SimStart, "SimStart");
+    simConnect.SubscribeToSystemEvent(EventId.SimStop, "SimStop");
   }
 
   private void RequestOwnshipStream()
   {
     lock (_gate)
     {
-      if (_simConnect is null || _requestedOwnshipStream)
+      if (_simConnect is null || _requestedOwnshipStream || !_simFlightActive)
       {
         return;
       }
@@ -518,18 +541,71 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     }
   }
 
+  private void StopOwnshipStream()
+  {
+    lock (_gate)
+    {
+      if (_simConnect is null || !_requestedOwnshipStream)
+      {
+        return;
+      }
+
+      _simConnect.RequestDataOnSimObject(
+        RequestId.Ownship,
+        DefinitionId.Ownship,
+        SimConnect.SIMCONNECT_OBJECT_ID_USER,
+        SIMCONNECT_PERIOD.NEVER,
+        0,
+        0,
+        0,
+        0
+      );
+
+      _requestedOwnshipStream = false;
+      _snapshotStore.Clear();
+      _logger.LogInformation("Ownship data stream stopped.");
+    }
+  }
+
   private void OnRecvOpen(SimConnect sender, SIMCONNECT_RECV_OPEN data)
   {
     _simApplicationName = NormalizeText(data.szApplicationName);
+    _simFlightActive = false;
     _logger.LogInformation("SimConnect session opened: {Version}", data.szApplicationName);
-    RequestOwnshipStream();
+    _logger.LogInformation("Waiting for active flight session (SimStart)...");
   }
 
   private void OnRecvQuit(SimConnect sender, SIMCONNECT_RECV data)
   {
+    _simFlightActive = false;
+    _snapshotStore.Clear();
     _simApplicationName = null;
     _logger.LogWarning("MSFS session closed. Waiting for simulator restart...");
     Disconnect();
+  }
+
+  private void OnRecvEvent(SimConnect sender, SIMCONNECT_RECV_EVENT data)
+  {
+    if (data.uEventID == (uint)EventId.SimStart)
+    {
+      if (!_simFlightActive)
+      {
+        _simFlightActive = true;
+        _logger.LogInformation("SimStart received. Flight session active.");
+      }
+      RequestOwnshipStream();
+      return;
+    }
+
+    if (data.uEventID == (uint)EventId.SimStop)
+    {
+      if (_simFlightActive)
+      {
+        _logger.LogInformation("SimStop received. Flight session inactive.");
+      }
+      _simFlightActive = false;
+      StopOwnshipStream();
+    }
   }
 
   private void OnRecvException(SimConnect sender, SIMCONNECT_RECV_EXCEPTION data)
@@ -539,21 +615,25 @@ internal sealed class SimConnectOwnshipService : BackgroundService
 
   private void OnRecvSimobjectData(SimConnect sender, SIMCONNECT_RECV_SIMOBJECT_DATA data)
   {
-    if (data.dwRequestID != (uint)RequestId.Ownship || data.dwData.Length == 0)
+    if (!_simFlightActive || data.dwRequestID != (uint)RequestId.Ownship || data.dwData.Length == 0)
     {
       return;
     }
 
     var ownship = (OwnshipData)data.dwData[0];
-    if (!IsValidCoordinates(ownship.LatitudeDeg, ownship.LongitudeDeg))
+    if (
+      !IsValidCoordinates(ownship.LatitudeDeg, ownship.LongitudeDeg)
+      || IsLikelyMenuPlaceholder(ownship)
+    )
     {
       return;
     }
 
     var snapshot = new OwnshipSnapshot(
       Id: "msfs_ownship",
-      Callsign: NormalizeText(ownship.AtcId),
+      Callsign: ResolveCallsign(ownship),
       AircraftTitle: NormalizeText(ownship.Title),
+      Squawk: FormatSquawk(ownship.TransponderCode),
       SimVersionLabel: ResolveSimVersionLabel(_simApplicationName, _options.SimVersionFallback),
       Lat: ownship.LatitudeDeg,
       Lon: ownship.LongitudeDeg,
@@ -580,12 +660,15 @@ internal sealed class SimConnectOwnshipService : BackgroundService
   private void DisconnectLocked()
   {
     _requestedOwnshipStream = false;
+    _simFlightActive = false;
+    _snapshotStore.Clear();
     _simApplicationName = null;
 
     if (_simConnect is not null)
     {
       _simConnect.OnRecvOpen -= OnRecvOpen;
       _simConnect.OnRecvQuit -= OnRecvQuit;
+      _simConnect.OnRecvEvent -= OnRecvEvent;
       _simConnect.OnRecvException -= OnRecvException;
       _simConnect.OnRecvSimobjectData -= OnRecvSimobjectData;
       _simConnect.Dispose();
@@ -606,6 +689,98 @@ internal sealed class SimConnectOwnshipService : BackgroundService
       && double.IsFinite(lon)
       && lat is >= -90 and <= 90
       && lon is >= -180 and <= 180;
+  }
+
+  private static bool IsLikelyMenuPlaceholder(OwnshipData ownship)
+  {
+    // Menu/non-flight states can emit a zeroed telemetry placeholder near Null Island.
+    var nearNullIsland = Math.Abs(ownship.LatitudeDeg) <= 0.001 && Math.Abs(ownship.LongitudeDeg) <= 0.001;
+    if (!nearNullIsland)
+    {
+      return false;
+    }
+
+    var nearZeroAltitude = Math.Abs(ownship.IndicatedAltitudeFt) <= 10 && Math.Abs(ownship.PlaneAltitudeFt) <= 10;
+    var nearZeroGroundSpeed = Math.Abs(ownship.GroundVelocityKt) <= 1;
+    var onGround = ownship.SimOnGround != 0;
+    return onGround && nearZeroAltitude && nearZeroGroundSpeed;
+  }
+
+  private static string? ResolveCallsign(OwnshipData ownship)
+  {
+    var airline = NormalizeText(ownship.AtcAirline);
+    var flightNumber = NormalizeText(ownship.AtcFlightNumber);
+    var atcId = NormalizeText(ownship.AtcId);
+
+    if (!string.IsNullOrWhiteSpace(atcId))
+    {
+      return atcId;
+    }
+
+    if (!string.IsNullOrWhiteSpace(airline))
+    {
+      return airline;
+    }
+
+    return flightNumber;
+  }
+
+  private static string? FormatSquawk(int rawValue)
+  {
+    if (rawValue < 0)
+    {
+      return null;
+    }
+
+    // Prefer direct decimal form when simulator already emits plain 4-digit code.
+    if (rawValue <= 7777)
+    {
+      var decimalCode = rawValue.ToString("D4", CultureInfo.InvariantCulture);
+      if (IsOctalDigits(decimalCode))
+      {
+        return decimalCode;
+      }
+    }
+
+    // Fallback for BCD-like representation (nibble-encoded octal digits).
+    if (rawValue > 0x7777)
+    {
+      return null;
+    }
+
+    var d0 = rawValue & 0xF;
+    var d1 = (rawValue >> 4) & 0xF;
+    var d2 = (rawValue >> 8) & 0xF;
+    var d3 = (rawValue >> 12) & 0xF;
+    if (d0 > 7 || d1 > 7 || d2 > 7 || d3 > 7)
+    {
+      return null;
+    }
+
+    return string.Create(
+      4,
+      (d3, d2, d1, d0),
+      (span, digits) =>
+      {
+        span[0] = (char)('0' + digits.d3);
+        span[1] = (char)('0' + digits.d2);
+        span[2] = (char)('0' + digits.d1);
+        span[3] = (char)('0' + digits.d0);
+      }
+    );
+  }
+
+  private static bool IsOctalDigits(string value)
+  {
+    foreach (var ch in value)
+    {
+      if (ch is < '0' or > '7')
+      {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private static string? NormalizeText(string? value)
@@ -652,6 +827,12 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     Ownship = 1,
   }
 
+  private enum EventId : uint
+  {
+    SimStart = 1,
+    SimStop = 2,
+  }
+
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
   private struct OwnshipData
   {
@@ -669,5 +850,13 @@ internal sealed class SimConnectOwnshipService : BackgroundService
 
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
     public string AtcId;
+
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+    public string AtcAirline;
+
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+    public string AtcFlightNumber;
+
+    public int TransponderCode;
   }
 }
