@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Net;
+using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -18,7 +20,9 @@ builder.Logging.AddSimpleConsole(options =>
 
 builder.Services.AddSingleton(bridgeOptions);
 builder.Services.AddSingleton<OwnshipSnapshotStore>();
+builder.Services.AddHttpClient();
 builder.Services.AddHostedService<SimConnectOwnshipService>();
+builder.Services.AddHostedService<RelayIngestService>();
 
 builder.WebHost.UseUrls($"http://{bridgeOptions.BindHost}:{bridgeOptions.Port}");
 
@@ -34,6 +38,7 @@ app.MapGet("/", (BridgeOptions options) => Results.Json(new
   status = "ok",
   streamPath = options.StreamPath,
   sampleIntervalMs = options.SampleIntervalMs,
+  relayEnabled = options.RelayEnabled,
 }));
 
 app.Map(bridgeOptions.StreamPath, async (
@@ -143,6 +148,14 @@ app.Lifetime.ApplicationStarted.Register(() =>
     bridgeOptions.StreamPath
   );
   app.Logger.LogInformation("Start MSFS flight and keep this bridge window open.");
+  if (bridgeOptions.RelayEnabled)
+  {
+    app.Logger.LogInformation(
+      "Relay uplink enabled: {BaseUrl} (credentials file: {CredentialsFile})",
+      bridgeOptions.RelayBaseUrl,
+      bridgeOptions.RelayCredentialsFile
+    );
+  }
 });
 
 try
@@ -180,6 +193,19 @@ internal sealed class BridgeOptions
   public string CompanionVersion { get; }
   public string SimPlatform { get; }
   public string SimVersionFallback { get; }
+  public bool RelayEnabled { get; }
+  public string RelayBaseUrl { get; }
+  public string? RelayUserId { get; }
+  public string? RelayPairCode { get; }
+  public string? RelayDeviceId { get; }
+  public string? RelayDeviceToken { get; }
+  public string RelayCredentialsFile { get; }
+  public int RelayLoopMs { get; }
+  public int RelayStopAfterNoTelemetrySec { get; }
+  public bool HasRelayDirectCredentials => !string.IsNullOrWhiteSpace(RelayDeviceId) && !string.IsNullOrWhiteSpace(RelayDeviceToken);
+  public string RelayCredentialsFilePath => Path.IsPathRooted(RelayCredentialsFile)
+    ? RelayCredentialsFile
+    : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, RelayCredentialsFile));
 
   private BridgeOptions(
     string bindHost,
@@ -193,7 +219,16 @@ internal sealed class BridgeOptions
     string deviceId,
     string companionVersion,
     string simPlatform,
-    string simVersionFallback
+    string simVersionFallback,
+    bool relayEnabled,
+    string relayBaseUrl,
+    string? relayUserId,
+    string? relayPairCode,
+    string? relayDeviceId,
+    string? relayDeviceToken,
+    string relayCredentialsFile,
+    int relayLoopMs,
+    int relayStopAfterNoTelemetrySec
   )
   {
     BindHost = bindHost;
@@ -208,6 +243,15 @@ internal sealed class BridgeOptions
     CompanionVersion = companionVersion;
     SimPlatform = simPlatform;
     SimVersionFallback = simVersionFallback;
+    RelayEnabled = relayEnabled;
+    RelayBaseUrl = relayBaseUrl;
+    RelayUserId = relayUserId;
+    RelayPairCode = relayPairCode;
+    RelayDeviceId = relayDeviceId;
+    RelayDeviceToken = relayDeviceToken;
+    RelayCredentialsFile = relayCredentialsFile;
+    RelayLoopMs = relayLoopMs;
+    RelayStopAfterNoTelemetrySec = relayStopAfterNoTelemetrySec;
   }
 
   public static BridgeOptions FromEnvironment()
@@ -225,6 +269,19 @@ internal sealed class BridgeOptions
     var simPlatform = ReadString("MSFS_BRIDGE_SIM_PLATFORM", "msfs").ToLowerInvariant();
     var simVersionFallback = ReadString("MSFS_BRIDGE_SIM_VERSION_FALLBACK", "Local Bridge");
     var deviceId = NormalizeDeviceId(deviceName);
+    var relayBaseUrl = NormalizeBaseUrl(ReadString("MSFS_RELAY_BASE_URL", "https://anobservatory.com"));
+    var relayUserId = ReadOptionalString("MSFS_RELAY_USER_ID", 120);
+    var relayPairCode = NormalizePairCode(ReadOptionalString("MSFS_RELAY_PAIR_CODE", 16));
+    var relayDeviceId = ReadOptionalString("MSFS_RELAY_DEVICE_ID", 64);
+    var relayDeviceToken = ReadOptionalString("MSFS_RELAY_DEVICE_TOKEN", 256);
+    var relayCredentialsFile = ReadString("MSFS_RELAY_CREDENTIALS_FILE", "relay-credentials.json");
+    var relayLoopMs = ReadInt("MSFS_RELAY_LOOP_MS", fallback: 250, min: 100, max: 2000);
+    var relayStopAfterNoTelemetrySec = ReadInt("MSFS_RELAY_STOP_AFTER_NO_TELEMETRY_SEC", fallback: 8, min: 2, max: 120);
+    var relayEnabled = ReadBool("MSFS_RELAY_ENABLED", fallback: false)
+      || !string.IsNullOrWhiteSpace(relayUserId)
+      || !string.IsNullOrWhiteSpace(relayPairCode)
+      || !string.IsNullOrWhiteSpace(relayDeviceId)
+      || !string.IsNullOrWhiteSpace(relayDeviceToken);
 
     return new BridgeOptions(
       bindHost: bindHost,
@@ -238,7 +295,16 @@ internal sealed class BridgeOptions
       deviceId: deviceId,
       companionVersion: companionVersion,
       simPlatform: simPlatform,
-      simVersionFallback: simVersionFallback
+      simVersionFallback: simVersionFallback,
+      relayEnabled: relayEnabled,
+      relayBaseUrl: relayBaseUrl,
+      relayUserId: relayUserId,
+      relayPairCode: relayPairCode,
+      relayDeviceId: relayDeviceId,
+      relayDeviceToken: relayDeviceToken,
+      relayCredentialsFile: relayCredentialsFile,
+      relayLoopMs: relayLoopMs,
+      relayStopAfterNoTelemetrySec: relayStopAfterNoTelemetrySec
     );
   }
 
@@ -250,6 +316,40 @@ internal sealed class BridgeOptions
       return fallback;
     }
     return value.Trim();
+  }
+
+  private static string? ReadOptionalString(string name, int maxLength)
+  {
+    var value = Environment.GetEnvironmentVariable(name);
+    if (string.IsNullOrWhiteSpace(value))
+    {
+      return null;
+    }
+
+    var trimmed = value.Trim();
+    if (trimmed.Length == 0 || trimmed.Length > maxLength)
+    {
+      return null;
+    }
+
+    return trimmed;
+  }
+
+  private static bool ReadBool(string name, bool fallback)
+  {
+    var value = Environment.GetEnvironmentVariable(name);
+    if (string.IsNullOrWhiteSpace(value))
+    {
+      return fallback;
+    }
+
+    var normalized = value.Trim().ToLowerInvariant();
+    return normalized switch
+    {
+      "1" or "true" or "yes" or "on" => true,
+      "0" or "false" or "no" or "off" => false,
+      _ => fallback,
+    };
   }
 
   private static int ReadInt(string name, int fallback, int min, int max)
@@ -282,6 +382,28 @@ internal sealed class BridgeOptions
     }
 
     return trimmed;
+  }
+
+  private static string NormalizeBaseUrl(string rawValue)
+  {
+    if (!Uri.TryCreate(rawValue, UriKind.Absolute, out var uri))
+    {
+      return "https://anobservatory.com";
+    }
+
+    var normalized = uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
+    return normalized.Length > 0 ? normalized : "https://anobservatory.com";
+  }
+
+  private static string? NormalizePairCode(string? rawValue)
+  {
+    if (string.IsNullOrWhiteSpace(rawValue))
+    {
+      return null;
+    }
+
+    var normalized = rawValue.Trim().ToUpperInvariant();
+    return normalized.Length > 0 ? normalized : null;
   }
 
   private static string NormalizeDeviceId(string deviceName)
@@ -375,6 +497,864 @@ internal sealed class OwnshipSnapshotStore
     {
       _latest = null;
     }
+  }
+}
+
+internal sealed record RelayCredentials(
+  string DeviceId,
+  string DeviceToken
+);
+
+internal sealed record RelaySessionStart(
+  string SessionId,
+  string IngestSocketUrl,
+  int HeartbeatIntervalSec,
+  int StaleAfterSec
+);
+
+internal readonly record struct RelayReceiveOutcome(
+  bool SessionInvalid,
+  string? Message
+);
+
+internal sealed class RelayAuthorizationException : Exception
+{
+  public RelayAuthorizationException(string message)
+    : base(message)
+  {
+  }
+}
+
+internal sealed class RelayIngestService : BackgroundService
+{
+  private const string PairCodePath = "/api/msfs/v1/pair-code";
+  private const string PairDevicePath = "/api/msfs/v1/devices/pair";
+  private const string SessionStartPath = "/api/msfs/v1/devices/session/start";
+  private const string SessionStopPath = "/api/msfs/v1/devices/session/stop";
+
+  private readonly ILogger<RelayIngestService> _logger;
+  private readonly OwnshipSnapshotStore _snapshotStore;
+  private readonly BridgeOptions _options;
+  private readonly IHttpClientFactory _httpClientFactory;
+  private DateTimeOffset _lastMissingCredentialWarningAt = DateTimeOffset.MinValue;
+
+  public RelayIngestService(
+    ILogger<RelayIngestService> logger,
+    OwnshipSnapshotStore snapshotStore,
+    BridgeOptions options,
+    IHttpClientFactory httpClientFactory
+  )
+  {
+    _logger = logger;
+    _snapshotStore = snapshotStore;
+    _options = options;
+    _httpClientFactory = httpClientFactory;
+  }
+
+  protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+  {
+    await Task.Yield();
+
+    if (!_options.RelayEnabled)
+    {
+      _logger.LogInformation("Relay uplink disabled (local-only mode).");
+      return;
+    }
+
+    _logger.LogInformation("Relay uplink worker started.");
+    var reconnectDelayMs = _options.ReconnectDelayMs;
+
+    while (!stoppingToken.IsCancellationRequested)
+    {
+      var httpClient = _httpClientFactory.CreateClient();
+      httpClient.Timeout = TimeSpan.FromSeconds(20);
+
+      try
+      {
+        var credentials = await ResolveCredentialsAsync(httpClient, stoppingToken);
+        if (credentials is null)
+        {
+          MaybeLogMissingCredentials();
+          await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+          continue;
+        }
+
+        var firstSnapshot = await WaitForOwnshipSnapshotAsync(stoppingToken);
+        var session = await StartRelaySessionAsync(httpClient, credentials, firstSnapshot, stoppingToken);
+        await RunRelaySessionAsync(httpClient, credentials, session, firstSnapshot, stoppingToken);
+        reconnectDelayMs = _options.ReconnectDelayMs;
+      }
+      catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+      {
+        break;
+      }
+      catch (RelayAuthorizationException ex)
+      {
+        _logger.LogWarning(ex, "Relay authorization failed. Clearing saved relay credentials and retrying.");
+        DeleteSavedRelayCredentials();
+        await Task.Delay(reconnectDelayMs, stoppingToken);
+        reconnectDelayMs = Math.Min(_options.ReconnectMaxDelayMs, reconnectDelayMs * 2);
+      }
+      catch (Exception ex)
+      {
+        _logger.LogWarning(ex, "Relay uplink cycle failed. Retrying...");
+        await Task.Delay(reconnectDelayMs, stoppingToken);
+        reconnectDelayMs = Math.Min(_options.ReconnectMaxDelayMs, reconnectDelayMs * 2);
+      }
+    }
+
+    _logger.LogInformation("Relay uplink worker stopped.");
+  }
+
+  private void MaybeLogMissingCredentials()
+  {
+    if (DateTimeOffset.UtcNow - _lastMissingCredentialWarningAt < TimeSpan.FromSeconds(15))
+    {
+      return;
+    }
+
+    _lastMissingCredentialWarningAt = DateTimeOffset.UtcNow;
+    _logger.LogWarning(
+      "Relay credentials unavailable. Set MSFS_RELAY_DEVICE_ID + MSFS_RELAY_DEVICE_TOKEN, " +
+      "or provide MSFS_RELAY_PAIR_CODE (and optionally MSFS_RELAY_USER_ID for scaffold pair generation)."
+    );
+  }
+
+  private async Task<RelayCredentials?> ResolveCredentialsAsync(HttpClient httpClient, CancellationToken cancellationToken)
+  {
+    if (_options.HasRelayDirectCredentials)
+    {
+      return new RelayCredentials(
+        DeviceId: _options.RelayDeviceId!,
+        DeviceToken: _options.RelayDeviceToken!
+      );
+    }
+
+    var fromFile = LoadRelayCredentialsFromFile();
+    if (fromFile is not null)
+    {
+      return fromFile;
+    }
+
+    var pairCode = await ResolvePairCodeAsync(httpClient, cancellationToken);
+    if (string.IsNullOrWhiteSpace(pairCode))
+    {
+      return null;
+    }
+
+    var paired = await PairDeviceAsync(httpClient, pairCode, cancellationToken);
+    SaveRelayCredentialsToFile(paired);
+    return paired;
+  }
+
+  private async Task<string?> ResolvePairCodeAsync(HttpClient httpClient, CancellationToken cancellationToken)
+  {
+    if (!string.IsNullOrWhiteSpace(_options.RelayPairCode))
+    {
+      return _options.RelayPairCode;
+    }
+
+    if (string.IsNullOrWhiteSpace(_options.RelayUserId))
+    {
+      return null;
+    }
+
+    var request = new HttpRequestMessage(HttpMethod.Post, BuildRelayUri(PairCodePath));
+    request.Headers.TryAddWithoutValidation("x-ao-user-id", _options.RelayUserId);
+
+    using var response = await httpClient.SendAsync(request, cancellationToken);
+    if (!response.IsSuccessStatusCode)
+    {
+      _logger.LogWarning(
+        "Failed to request relay pair code ({StatusCode}).",
+        (int)response.StatusCode
+      );
+      return null;
+    }
+
+    using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+    var pairCode = ReadRequiredStringProperty(document.RootElement, "pairCode");
+    if (pairCode is null)
+    {
+      _logger.LogWarning("Relay pair-code response did not include pairCode.");
+      return null;
+    }
+
+    _logger.LogInformation("Relay pair code issued for scaffold user context.");
+    return pairCode;
+  }
+
+  private async Task<RelayCredentials> PairDeviceAsync(
+    HttpClient httpClient,
+    string pairCode,
+    CancellationToken cancellationToken
+  )
+  {
+    var requestBody = new
+    {
+      pairCode,
+      deviceName = _options.DeviceName,
+      companionVersion = _options.CompanionVersion,
+    };
+
+    using var request = new HttpRequestMessage(HttpMethod.Post, BuildRelayUri(PairDevicePath))
+    {
+      Content = CreateJsonContent(requestBody),
+    };
+
+    using var response = await httpClient.SendAsync(request, cancellationToken);
+    if (!response.IsSuccessStatusCode)
+    {
+      var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+      throw new InvalidOperationException(
+        $"Relay pair failed ({(int)response.StatusCode}): {TruncateForLog(errorBody, 200)}"
+      );
+    }
+
+    using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+    var deviceId = ReadRequiredStringProperty(document.RootElement, "deviceId");
+    var deviceToken = ReadRequiredStringProperty(document.RootElement, "deviceToken");
+    if (deviceId is null || deviceToken is null)
+    {
+      throw new InvalidOperationException("Relay pair response is missing device credentials.");
+    }
+
+    _logger.LogInformation("Relay device paired successfully ({DeviceId}).", deviceId);
+    return new RelayCredentials(deviceId, deviceToken);
+  }
+
+  private async Task<OwnshipSnapshot> WaitForOwnshipSnapshotAsync(CancellationToken cancellationToken)
+  {
+    var nextLogAt = DateTimeOffset.MinValue;
+
+    while (!cancellationToken.IsCancellationRequested)
+    {
+      if (_snapshotStore.TryRead(out var snapshot))
+      {
+        return snapshot;
+      }
+
+      if (DateTimeOffset.UtcNow >= nextLogAt)
+      {
+        _logger.LogInformation("Relay waiting for first ownship telemetry (start a flight in MSFS).");
+        nextLogAt = DateTimeOffset.UtcNow.AddSeconds(10);
+      }
+
+      await Task.Delay(_options.RelayLoopMs, cancellationToken);
+    }
+
+    throw new OperationCanceledException(cancellationToken);
+  }
+
+  private async Task<RelaySessionStart> StartRelaySessionAsync(
+    HttpClient httpClient,
+    RelayCredentials credentials,
+    OwnshipSnapshot firstSnapshot,
+    CancellationToken cancellationToken
+  )
+  {
+    var simVersion = NormalizeRelaySimVersion(firstSnapshot.SimVersionLabel, _options.SimVersionFallback);
+    var requestBody = new
+    {
+      deviceId = credentials.DeviceId,
+      sim = new
+      {
+        platform = _options.SimPlatform,
+        version = simVersion,
+      },
+    };
+
+    using var request = new HttpRequestMessage(HttpMethod.Post, BuildRelayUri(SessionStartPath))
+    {
+      Content = CreateJsonContent(requestBody),
+    };
+    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credentials.DeviceToken);
+
+    using var response = await httpClient.SendAsync(request, cancellationToken);
+    if (IsAuthStatusCode(response.StatusCode))
+    {
+      throw new RelayAuthorizationException($"Relay session start unauthorized ({(int)response.StatusCode}).");
+    }
+    if (!response.IsSuccessStatusCode)
+    {
+      var body = await response.Content.ReadAsStringAsync(cancellationToken);
+      throw new InvalidOperationException(
+        $"Relay session start failed ({(int)response.StatusCode}): {TruncateForLog(body, 200)}"
+      );
+    }
+
+    using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+    var sessionId = ReadRequiredStringProperty(document.RootElement, "sessionId");
+    var ingestSocketUrl = ReadRequiredStringProperty(document.RootElement, "ingestSocketUrl");
+    if (sessionId is null || ingestSocketUrl is null)
+    {
+      throw new InvalidOperationException("Relay session start response missing session metadata.");
+    }
+
+    var heartbeatIntervalSec = ReadOptionalIntProperty(document.RootElement, "heartbeatIntervalSec") ?? 15;
+    var staleAfterSec = ReadOptionalIntProperty(document.RootElement, "staleAfterSec") ?? 10;
+
+    _logger.LogInformation(
+      "Relay session started ({SessionId}). heartbeat={HeartbeatSec}s staleAfter={StaleSec}s",
+      sessionId,
+      heartbeatIntervalSec,
+      staleAfterSec
+    );
+
+    return new RelaySessionStart(
+      SessionId: sessionId,
+      IngestSocketUrl: ingestSocketUrl,
+      HeartbeatIntervalSec: Math.Clamp(heartbeatIntervalSec, 5, 120),
+      StaleAfterSec: Math.Clamp(staleAfterSec, 5, 300)
+    );
+  }
+
+  private async Task RunRelaySessionAsync(
+    HttpClient httpClient,
+    RelayCredentials credentials,
+    RelaySessionStart session,
+    OwnshipSnapshot initialSnapshot,
+    CancellationToken stoppingToken
+  )
+  {
+    using var socket = new ClientWebSocket();
+    socket.Options.SetRequestHeader("Authorization", $"Bearer {credentials.DeviceToken}");
+    await socket.ConnectAsync(new Uri(session.IngestSocketUrl), stoppingToken);
+    _logger.LogInformation("Relay ingest socket connected.");
+
+    using var relayCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+    var receiveTask = ReceiveLoopAsync(socket, relayCts.Token);
+    RelayReceiveOutcome? receiveOutcome = null;
+
+    var heartbeatIntervalSec = Math.Clamp(session.HeartbeatIntervalSec, 5, 120);
+    var telemetryRefreshIntervalSec = Math.Max(2, Math.Min(heartbeatIntervalSec, 3));
+    var nextHeartbeatAt = DateTimeOffset.UtcNow.AddSeconds(heartbeatIntervalSec);
+    var lastSentSnapshotTs = 0L;
+    var lastTelemetrySentAt = DateTimeOffset.MinValue;
+    var sessionStopSent = false;
+
+    async Task PublishSnapshotAsync(
+      OwnshipSnapshot snapshot,
+      CancellationToken cancellationToken,
+      long? telemetryTsOverride = null
+    )
+    {
+      await SendTelemetryAsync(
+        socket,
+        session.SessionId,
+        snapshot,
+        cancellationToken,
+        telemetryTsOverride
+      );
+      lastSentSnapshotTs = snapshot.TimestampMs;
+      lastTelemetrySentAt = DateTimeOffset.UtcNow;
+    }
+
+    await PublishSnapshotAsync(initialSnapshot, relayCts.Token);
+
+    while (!stoppingToken.IsCancellationRequested && socket.State == WebSocketState.Open)
+    {
+      if (receiveTask.IsCompleted)
+      {
+        receiveOutcome = await receiveTask;
+        if (receiveOutcome.Value.SessionInvalid)
+        {
+          throw new RelayAuthorizationException(receiveOutcome.Value.Message ?? "Relay ingest session invalid.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(receiveOutcome.Value.Message))
+        {
+          _logger.LogWarning("Relay ingest closed: {Message}", receiveOutcome.Value.Message);
+        }
+        break;
+      }
+
+      var now = DateTimeOffset.UtcNow;
+      var hasSnapshot = _snapshotStore.TryRead(out var snapshot);
+
+      if (hasSnapshot)
+      {
+        if (snapshot.TimestampMs > lastSentSnapshotTs)
+        {
+          await PublishSnapshotAsync(snapshot, relayCts.Token);
+        }
+        else if (
+          lastTelemetrySentAt == DateTimeOffset.MinValue
+          || now - lastTelemetrySentAt >= TimeSpan.FromSeconds(telemetryRefreshIntervalSec)
+        )
+        {
+          await PublishSnapshotAsync(
+            snapshot,
+            relayCts.Token,
+            telemetryTsOverride: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+          );
+        }
+      }
+
+      if (now >= nextHeartbeatAt)
+      {
+        await SendHeartbeatAsync(socket, session.SessionId, relayCts.Token);
+        nextHeartbeatAt = now.AddSeconds(heartbeatIntervalSec);
+      }
+
+      if (
+        !hasSnapshot
+        && lastTelemetrySentAt != DateTimeOffset.MinValue
+        && now - lastTelemetrySentAt >= TimeSpan.FromSeconds(_options.RelayStopAfterNoTelemetrySec)
+      )
+      {
+        await SendSessionStopAsync(socket, session.SessionId, relayCts.Token);
+        sessionStopSent = true;
+        _logger.LogInformation(
+          "Relay session paused after {IdleSeconds}s without telemetry.",
+          _options.RelayStopAfterNoTelemetrySec
+        );
+        break;
+      }
+
+      await Task.Delay(_options.RelayLoopMs, stoppingToken);
+    }
+
+    relayCts.Cancel();
+
+    if (receiveOutcome is null)
+    {
+      try
+      {
+        receiveOutcome = await receiveTask;
+      }
+      catch (OperationCanceledException)
+      {
+        receiveOutcome = null;
+      }
+    }
+
+    if (!sessionStopSent)
+    {
+      await StopRelaySessionAsync(httpClient, credentials, session.SessionId, stoppingToken);
+    }
+
+    if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+    {
+      try
+      {
+        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "session-end", CancellationToken.None);
+      }
+      catch
+      {
+        // Ignore close errors.
+      }
+    }
+  }
+
+  private async Task<RelayReceiveOutcome> ReceiveLoopAsync(ClientWebSocket socket, CancellationToken cancellationToken)
+  {
+    var buffer = new byte[4096];
+    using var messageBuffer = new MemoryStream();
+
+    while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
+    {
+      WebSocketReceiveResult result;
+      try
+      {
+        result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+      }
+      catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+      {
+        break;
+      }
+      catch (WebSocketException ex)
+      {
+        return new RelayReceiveOutcome(false, $"Relay ingest receive failed: {ex.Message}");
+      }
+
+      if (result.MessageType == WebSocketMessageType.Close)
+      {
+        return new RelayReceiveOutcome(false, "Relay ingest socket closed.");
+      }
+
+      if (result.Count > 0)
+      {
+        messageBuffer.Write(buffer, 0, result.Count);
+      }
+
+      if (!result.EndOfMessage)
+      {
+        continue;
+      }
+
+      if (messageBuffer.Length == 0)
+      {
+        continue;
+      }
+
+      var message = Encoding.UTF8.GetString(messageBuffer.ToArray());
+      messageBuffer.SetLength(0);
+
+      if (!TryParseIngestError(message, out var code, out var errorMessage, out var retryable))
+      {
+        continue;
+      }
+
+      _logger.LogWarning(
+        "Relay ingest error event: {Code} ({Message})",
+        code ?? "unknown",
+        errorMessage ?? "no message"
+      );
+
+      if (
+        retryable
+        || string.Equals(code, "INGEST_SESSION_INVALID", StringComparison.OrdinalIgnoreCase)
+      )
+      {
+        return new RelayReceiveOutcome(true, errorMessage ?? code ?? "Relay ingest session invalid.");
+      }
+    }
+
+    return new RelayReceiveOutcome(false, null);
+  }
+
+  private static bool TryParseIngestError(
+    string message,
+    out string? code,
+    out string? errorMessage,
+    out bool retryable
+  )
+  {
+    code = null;
+    errorMessage = null;
+    retryable = false;
+
+    try
+    {
+      using var document = JsonDocument.Parse(message);
+      var root = document.RootElement;
+      if (root.ValueKind != JsonValueKind.Object)
+      {
+        return false;
+      }
+
+      if (
+        !root.TryGetProperty("type", out var typeElement)
+        || !string.Equals(typeElement.GetString(), "error", StringComparison.OrdinalIgnoreCase)
+      )
+      {
+        return false;
+      }
+
+      if (root.TryGetProperty("code", out var codeElement))
+      {
+        code = codeElement.GetString();
+      }
+      if (root.TryGetProperty("message", out var messageElement))
+      {
+        errorMessage = messageElement.GetString();
+      }
+      if (
+        root.TryGetProperty("retryable", out var retryableElement)
+        && retryableElement.ValueKind == JsonValueKind.True
+      )
+      {
+        retryable = true;
+      }
+
+      return true;
+    }
+    catch
+    {
+      return false;
+    }
+  }
+
+  private async Task SendTelemetryAsync(
+    ClientWebSocket socket,
+    string sessionId,
+    OwnshipSnapshot snapshot,
+    CancellationToken cancellationToken,
+    long? telemetryTsOverride = null
+  )
+  {
+    var message = new
+    {
+      type = "telemetry",
+      sessionId,
+      payload = new
+      {
+        source = "msfs_local",
+        version = 1,
+        ts = telemetryTsOverride ?? snapshot.TimestampMs,
+        ownship = new
+        {
+          id = snapshot.Id,
+          callsign = snapshot.Callsign,
+          aircraftTitle = snapshot.AircraftTitle,
+          lat = snapshot.Lat,
+          lon = snapshot.Lon,
+          altBaroFt = snapshot.AltBaroFt,
+          altGeomFt = snapshot.AltGeomFt,
+          gsKt = snapshot.GsKt,
+          trackDegTrue = snapshot.TrackDegTrue,
+          vsFpm = snapshot.VsFpm,
+          onGround = snapshot.OnGround,
+        },
+      },
+    };
+
+    await SendJsonAsync(socket, message, cancellationToken);
+  }
+
+  private async Task SendHeartbeatAsync(
+    ClientWebSocket socket,
+    string sessionId,
+    CancellationToken cancellationToken
+  )
+  {
+    await SendJsonAsync(
+      socket,
+      new
+      {
+        type = "heartbeat",
+        sessionId,
+        ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+      },
+      cancellationToken
+    );
+  }
+
+  private async Task SendSessionStopAsync(
+    ClientWebSocket socket,
+    string sessionId,
+    CancellationToken cancellationToken
+  )
+  {
+    await SendJsonAsync(
+      socket,
+      new
+      {
+        type = "session_stop",
+        sessionId,
+        ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+      },
+      cancellationToken
+    );
+  }
+
+  private static async Task SendJsonAsync(
+    ClientWebSocket socket,
+    object payload,
+    CancellationToken cancellationToken
+  )
+  {
+    if (socket.State != WebSocketState.Open)
+    {
+      return;
+    }
+
+    var bytes = JsonSerializer.SerializeToUtf8Bytes(payload);
+    await socket.SendAsync(
+      new ArraySegment<byte>(bytes),
+      WebSocketMessageType.Text,
+      true,
+      cancellationToken
+    );
+  }
+
+  private async Task StopRelaySessionAsync(
+    HttpClient httpClient,
+    RelayCredentials credentials,
+    string sessionId,
+    CancellationToken cancellationToken
+  )
+  {
+    using var request = new HttpRequestMessage(HttpMethod.Post, BuildRelayUri(SessionStopPath))
+    {
+      Content = CreateJsonContent(new { sessionId }),
+    };
+    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credentials.DeviceToken);
+
+    try
+    {
+      using var response = await httpClient.SendAsync(request, cancellationToken);
+      if (response.IsSuccessStatusCode)
+      {
+        return;
+      }
+
+      _logger.LogDebug(
+        "Relay session stop returned {StatusCode}.",
+        (int)response.StatusCode
+      );
+    }
+    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+    {
+      // shutdown path
+    }
+    catch (Exception ex)
+    {
+      _logger.LogDebug(ex, "Relay session stop request failed.");
+    }
+  }
+
+  private Uri BuildRelayUri(string path)
+  {
+    var baseUrl = _options.RelayBaseUrl.TrimEnd('/');
+    return new Uri($"{baseUrl}{path}", UriKind.Absolute);
+  }
+
+  private RelayCredentials? LoadRelayCredentialsFromFile()
+  {
+    var path = _options.RelayCredentialsFilePath;
+    if (!File.Exists(path))
+    {
+      return null;
+    }
+
+    try
+    {
+      using var stream = File.OpenRead(path);
+      using var document = JsonDocument.Parse(stream);
+      var root = document.RootElement;
+      if (root.ValueKind != JsonValueKind.Object)
+      {
+        return null;
+      }
+
+      var deviceId = ReadRequiredStringProperty(root, "deviceId");
+      var deviceToken = ReadRequiredStringProperty(root, "deviceToken");
+      if (deviceId is null || deviceToken is null)
+      {
+        return null;
+      }
+
+      return new RelayCredentials(deviceId, deviceToken);
+    }
+    catch (Exception ex)
+    {
+      _logger.LogWarning(ex, "Failed to read relay credentials file: {Path}", path);
+      return null;
+    }
+  }
+
+  private void SaveRelayCredentialsToFile(RelayCredentials credentials)
+  {
+    var path = _options.RelayCredentialsFilePath;
+    try
+    {
+      var directory = Path.GetDirectoryName(path);
+      if (!string.IsNullOrWhiteSpace(directory))
+      {
+        Directory.CreateDirectory(directory);
+      }
+
+      var payload = new
+      {
+        deviceId = credentials.DeviceId,
+        deviceToken = credentials.DeviceToken,
+        updatedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+      };
+
+      var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+      {
+        WriteIndented = true,
+      });
+      File.WriteAllText(path, json, Encoding.UTF8);
+      _logger.LogInformation("Relay credentials saved to {Path}", path);
+    }
+    catch (Exception ex)
+    {
+      _logger.LogWarning(ex, "Failed to save relay credentials file: {Path}", path);
+    }
+  }
+
+  private void DeleteSavedRelayCredentials()
+  {
+    if (_options.HasRelayDirectCredentials)
+    {
+      return;
+    }
+
+    var path = _options.RelayCredentialsFilePath;
+    try
+    {
+      if (File.Exists(path))
+      {
+        File.Delete(path);
+      }
+    }
+    catch (Exception ex)
+    {
+      _logger.LogWarning(ex, "Failed to delete relay credentials file: {Path}", path);
+    }
+  }
+
+  private static bool IsAuthStatusCode(HttpStatusCode statusCode)
+  {
+    return statusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden;
+  }
+
+  private static HttpContent CreateJsonContent<T>(T value)
+  {
+    return new StringContent(
+      JsonSerializer.Serialize(value),
+      Encoding.UTF8,
+      "application/json"
+    );
+  }
+
+  private static string NormalizeRelaySimVersion(string? simVersionLabel, string fallback)
+  {
+    var normalized = string.IsNullOrWhiteSpace(simVersionLabel)
+      ? fallback
+      : simVersionLabel.Trim();
+    if (normalized.Length <= 16)
+    {
+      return normalized;
+    }
+    return normalized[..16];
+  }
+
+  private static string? ReadRequiredStringProperty(JsonElement root, string propertyName)
+  {
+    if (!root.TryGetProperty(propertyName, out var element))
+    {
+      return null;
+    }
+    if (element.ValueKind != JsonValueKind.String)
+    {
+      return null;
+    }
+    var value = element.GetString()?.Trim();
+    return string.IsNullOrWhiteSpace(value) ? null : value;
+  }
+
+  private static int? ReadOptionalIntProperty(JsonElement root, string propertyName)
+  {
+    if (!root.TryGetProperty(propertyName, out var element))
+    {
+      return null;
+    }
+
+    if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out var numeric))
+    {
+      return numeric;
+    }
+
+    if (element.ValueKind == JsonValueKind.String && int.TryParse(element.GetString(), out var parsed))
+    {
+      return parsed;
+    }
+
+    return null;
+  }
+
+  private static string TruncateForLog(string value, int maxLength)
+  {
+    var trimmed = value.Trim();
+    if (trimmed.Length <= maxLength)
+    {
+      return trimmed;
+    }
+    return $"{trimmed[..maxLength]}...";
   }
 }
 
