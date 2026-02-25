@@ -14,7 +14,7 @@ param(
   [string]$RelayDeviceToken = "",
   [string]$RelayCredentialsFile = "relay-credentials.json",
   [int]$RelayLoopMs = 250,
-  [int]$RelayStopAfterNoTelemetrySec = 8
+  [int]$RelayStopAfterNoTelemetrySec = 20
 )
 
 $ErrorActionPreference = "Stop"

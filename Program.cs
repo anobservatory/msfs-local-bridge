@@ -277,7 +277,7 @@ internal sealed class BridgeOptions
     var relayDeviceToken = ReadOptionalString("MSFS_RELAY_DEVICE_TOKEN", 256);
     var relayCredentialsFile = ReadString("MSFS_RELAY_CREDENTIALS_FILE", "relay-credentials.json");
     var relayLoopMs = ReadInt("MSFS_RELAY_LOOP_MS", fallback: 250, min: 100, max: 2000);
-    var relayStopAfterNoTelemetrySec = ReadInt("MSFS_RELAY_STOP_AFTER_NO_TELEMETRY_SEC", fallback: 8, min: 2, max: 120);
+    var relayStopAfterNoTelemetrySec = ReadInt("MSFS_RELAY_STOP_AFTER_NO_TELEMETRY_SEC", fallback: 20, min: 2, max: 120);
     var relayEnabled = ReadBool("MSFS_RELAY_ENABLED", fallback: false)
       || !string.IsNullOrWhiteSpace(relayUserId)
       || !string.IsNullOrWhiteSpace(relayPairCode)
@@ -535,7 +535,6 @@ internal sealed class RelayAuthorizationException : Exception
 
 internal sealed class RelayIngestService : BackgroundService
 {
-  private const string PairCodePath = "/api/msfs/v1/pair-code";
   private const string PairDevicePath = "/api/msfs/v1/devices/pair";
   private const string DeviceLinkStartPath = "/api/msfs/v1/devices/link/start";
   private const string DeviceLinkApprovePath = "/api/msfs/v1/devices/link/approve";
@@ -677,41 +676,24 @@ internal sealed class RelayIngestService : BackgroundService
     return null;
   }
 
-  private async Task<string?> ResolvePairCodeAsync(HttpClient httpClient, CancellationToken cancellationToken)
+  private Task<string?> ResolvePairCodeAsync(HttpClient httpClient, CancellationToken cancellationToken)
   {
+    _ = httpClient;
+    _ = cancellationToken;
+
     if (!string.IsNullOrWhiteSpace(_options.RelayPairCode))
     {
-      return _options.RelayPairCode;
+      return Task.FromResult<string?>(_options.RelayPairCode);
     }
 
-    if (string.IsNullOrWhiteSpace(_options.RelayUserId))
+    if (!string.IsNullOrWhiteSpace(_options.RelayUserId))
     {
-      return null;
-    }
-
-    var request = new HttpRequestMessage(HttpMethod.Post, BuildRelayUri(PairCodePath));
-    request.Headers.TryAddWithoutValidation("x-ao-user-id", _options.RelayUserId);
-
-    using var response = await httpClient.SendAsync(request, cancellationToken);
-    if (!response.IsSuccessStatusCode)
-    {
-      _logger.LogWarning(
-        "Failed to request relay pair code ({StatusCode}).",
-        (int)response.StatusCode
+      _logger.LogInformation(
+        "Relay user context detected; skipping pair-code request and using device-link flow."
       );
-      return null;
     }
 
-    using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-    var pairCode = ReadRequiredStringProperty(document.RootElement, "pairCode");
-    if (pairCode is null)
-    {
-      _logger.LogWarning("Relay pair-code response did not include pairCode.");
-      return null;
-    }
-
-    _logger.LogInformation("Relay pair code issued for scaffold user context.");
-    return pairCode;
+    return Task.FromResult<string?>(null);
   }
 
   private async Task<RelayCredentials?> TryAutoLinkDeviceAsync(
