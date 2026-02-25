@@ -22,28 +22,26 @@ This bridge is the real SimConnect sender.
 
 Relay mode is required for `https://anobservatory.com` (production stream path).
 
-First run (with a freshly-issued pair code, valid ~5 minutes):
-
-```powershell
-.\run-bridge.ps1 -RelayEnabled -RelayPairCode "<REAL_PAIR_CODE>"
-```
-
-Important:
-
-- Do not use placeholder examples like `A1B2-C3D4`.
-- Pair code must come from `POST /api/msfs/v1/pair-code` for your user context.
-- If you see `Pair code is invalid`, issue a new code and retry immediately.
-
-Optional scaffold pairing (dev-only user context):
-
-```powershell
-.\run-bridge.ps1 -RelayEnabled -RelayUserId "<user-id>"
-```
-
-Subsequent runs:
+Default first run (recommended):
 
 ```powershell
 .\run-bridge.ps1 -RelayEnabled
+```
+
+What happens:
+
+1. Bridge requests a device-link challenge.
+2. Browser opens approval URL.
+3. After user approves in browser, bridge polls and stores credentials automatically.
+
+Fallback paths (advanced/manual):
+
+```powershell
+# explicit pair code
+.\run-bridge.ps1 -RelayEnabled -RelayPairCode "<REAL_PAIR_CODE>"
+
+# scaffold user context (dev only)
+.\run-bridge.ps1 -RelayEnabled -RelayUserId "<user-id>"
 ```
 
 Relay credentials are persisted to:

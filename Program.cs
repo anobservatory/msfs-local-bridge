@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.WebSockets;
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -512,6 +513,13 @@ internal sealed record RelaySessionStart(
   int StaleAfterSec
 );
 
+internal sealed record RelayDeviceLinkStart(
+  string LinkToken,
+  string VerificationUrl,
+  int PollIntervalSec,
+  int ExpiresInSec
+);
+
 internal readonly record struct RelayReceiveOutcome(
   bool SessionInvalid,
   string? Message
@@ -529,6 +537,8 @@ internal sealed class RelayIngestService : BackgroundService
 {
   private const string PairCodePath = "/api/msfs/v1/pair-code";
   private const string PairDevicePath = "/api/msfs/v1/devices/pair";
+  private const string DeviceLinkStartPath = "/api/msfs/v1/devices/link/start";
+  private const string DeviceLinkPollPath = "/api/msfs/v1/devices/link/poll";
   private const string SessionStartPath = "/api/msfs/v1/devices/session/start";
   private const string SessionStopPath = "/api/msfs/v1/devices/session/stop";
 
@@ -616,7 +626,8 @@ internal sealed class RelayIngestService : BackgroundService
     _lastMissingCredentialWarningAt = DateTimeOffset.UtcNow;
     _logger.LogWarning(
       "Relay credentials unavailable. Set MSFS_RELAY_DEVICE_ID + MSFS_RELAY_DEVICE_TOKEN, " +
-      "or provide MSFS_RELAY_PAIR_CODE (and optionally MSFS_RELAY_USER_ID for scaffold pair generation)."
+      "or provide MSFS_RELAY_PAIR_CODE (optionally MSFS_RELAY_USER_ID), " +
+      "or approve device-link in browser when prompted."
     );
   }
 
@@ -637,14 +648,21 @@ internal sealed class RelayIngestService : BackgroundService
     }
 
     var pairCode = await ResolvePairCodeAsync(httpClient, cancellationToken);
-    if (string.IsNullOrWhiteSpace(pairCode))
+    if (!string.IsNullOrWhiteSpace(pairCode))
     {
-      return null;
+      var paired = await PairDeviceAsync(httpClient, pairCode, cancellationToken);
+      SaveRelayCredentialsToFile(paired);
+      return paired;
     }
 
-    var paired = await PairDeviceAsync(httpClient, pairCode, cancellationToken);
-    SaveRelayCredentialsToFile(paired);
-    return paired;
+    var linked = await TryAutoLinkDeviceAsync(httpClient, cancellationToken);
+    if (linked is not null)
+    {
+      SaveRelayCredentialsToFile(linked);
+      return linked;
+    }
+
+    return null;
   }
 
   private async Task<string?> ResolvePairCodeAsync(HttpClient httpClient, CancellationToken cancellationToken)
@@ -682,6 +700,188 @@ internal sealed class RelayIngestService : BackgroundService
 
     _logger.LogInformation("Relay pair code issued for scaffold user context.");
     return pairCode;
+  }
+
+  private async Task<RelayCredentials?> TryAutoLinkDeviceAsync(
+    HttpClient httpClient,
+    CancellationToken cancellationToken
+  )
+  {
+    var linkStart = await StartDeviceLinkAsync(httpClient, cancellationToken);
+    if (linkStart is null)
+    {
+      return null;
+    }
+
+    _logger.LogInformation("Relay approval required: {VerificationUrl}", linkStart.VerificationUrl);
+    TryOpenRelayApprovalInBrowser(linkStart.VerificationUrl);
+
+    var linked = await PollDeviceLinkAsync(httpClient, linkStart, cancellationToken);
+    if (linked is null)
+    {
+      _logger.LogWarning("Relay device-link was not completed. Will retry.");
+      return null;
+    }
+
+    _logger.LogInformation("Relay device linked successfully ({DeviceId}).", linked.DeviceId);
+    return linked;
+  }
+
+  private async Task<RelayDeviceLinkStart?> StartDeviceLinkAsync(
+    HttpClient httpClient,
+    CancellationToken cancellationToken
+  )
+  {
+    using var request = new HttpRequestMessage(HttpMethod.Post, BuildRelayUri(DeviceLinkStartPath))
+    {
+      Content = CreateJsonContent(new
+      {
+        deviceName = _options.DeviceName,
+        companionVersion = _options.CompanionVersion,
+      }),
+    };
+
+    using var response = await httpClient.SendAsync(request, cancellationToken);
+    if (!response.IsSuccessStatusCode)
+    {
+      var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+      _logger.LogWarning(
+        "Relay link/start failed ({StatusCode}): {Body}",
+        (int)response.StatusCode,
+        TruncateForLog(errorBody, 200)
+      );
+      return null;
+    }
+
+    using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+    var root = document.RootElement;
+    var linkToken = ReadRequiredStringProperty(root, "linkToken");
+    var verificationUrl = ReadRequiredStringProperty(root, "verificationUrl");
+    if (linkToken is null || verificationUrl is null)
+    {
+      _logger.LogWarning("Relay link/start response missing linkToken or verificationUrl.");
+      return null;
+    }
+
+    var pollIntervalSec = ReadOptionalIntProperty(root, "pollIntervalSec") ?? 2;
+    var expiresInSec = ReadOptionalIntProperty(root, "expiresInSec") ?? 300;
+
+    return new RelayDeviceLinkStart(
+      LinkToken: linkToken,
+      VerificationUrl: verificationUrl,
+      PollIntervalSec: Math.Clamp(pollIntervalSec, 1, 10),
+      ExpiresInSec: Math.Clamp(expiresInSec, 30, 1200)
+    );
+  }
+
+  private async Task<RelayCredentials?> PollDeviceLinkAsync(
+    HttpClient httpClient,
+    RelayDeviceLinkStart linkStart,
+    CancellationToken cancellationToken
+  )
+  {
+    var expiresAt = DateTimeOffset.UtcNow.AddSeconds(linkStart.ExpiresInSec);
+    var pollIntervalSec = Math.Clamp(linkStart.PollIntervalSec, 1, 10);
+    var nextPendingLogAt = DateTimeOffset.MinValue;
+
+    while (!cancellationToken.IsCancellationRequested && DateTimeOffset.UtcNow < expiresAt)
+    {
+      using var request = new HttpRequestMessage(HttpMethod.Post, BuildRelayUri(DeviceLinkPollPath))
+      {
+        Content = CreateJsonContent(new { linkToken = linkStart.LinkToken }),
+      };
+
+      using var response = await httpClient.SendAsync(request, cancellationToken);
+
+      if ((int)response.StatusCode == 202)
+      {
+        using var pendingDocument = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        var pendingPollAfterSec = ReadOptionalIntProperty(pendingDocument.RootElement, "pollAfterSec");
+        if (pendingPollAfterSec is int value)
+        {
+          pollIntervalSec = Math.Clamp(value, 1, 10);
+        }
+
+        if (DateTimeOffset.UtcNow >= nextPendingLogAt)
+        {
+          _logger.LogInformation("Relay approval pending. Complete approval in browser.");
+          nextPendingLogAt = DateTimeOffset.UtcNow.AddSeconds(10);
+        }
+
+        await Task.Delay(TimeSpan.FromSeconds(pollIntervalSec), cancellationToken);
+        continue;
+      }
+
+      if (response.IsSuccessStatusCode)
+      {
+        using var approvedDocument = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        var deviceId = ReadRequiredStringProperty(approvedDocument.RootElement, "deviceId");
+        var deviceToken = ReadRequiredStringProperty(approvedDocument.RootElement, "deviceToken");
+        if (deviceId is null || deviceToken is null)
+        {
+          throw new InvalidOperationException("Relay link/poll response missing device credentials.");
+        }
+
+        return new RelayCredentials(deviceId, deviceToken);
+      }
+
+      if ((int)response.StatusCode == 400)
+      {
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger.LogWarning(
+          "Relay link/poll invalid request ({StatusCode}): {Body}",
+          (int)response.StatusCode,
+          TruncateForLog(body, 200)
+        );
+        return null;
+      }
+
+      if (IsAuthStatusCode(response.StatusCode))
+      {
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger.LogWarning(
+          "Relay link/poll unauthorized ({StatusCode}): {Body}",
+          (int)response.StatusCode,
+          TruncateForLog(body, 200)
+        );
+        return null;
+      }
+
+      var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+      throw new InvalidOperationException(
+        $"Relay link/poll failed ({(int)response.StatusCode}): {TruncateForLog(errorBody, 200)}"
+      );
+    }
+
+    return null;
+  }
+
+  private void TryOpenRelayApprovalInBrowser(string verificationUrl)
+  {
+    try
+    {
+      using var process = Process.Start(new ProcessStartInfo
+      {
+        FileName = verificationUrl,
+        UseShellExecute = true,
+      });
+
+      if (process is null)
+      {
+        _logger.LogWarning(
+          "Could not auto-open browser. Open manually to approve relay: {VerificationUrl}",
+          verificationUrl
+        );
+      }
+    }
+    catch (Exception ex)
+    {
+      _logger.LogWarning(
+        ex,
+        "Failed to open browser for relay approval. Open manually: {VerificationUrl}",
+        verificationUrl
+      );
+    }
   }
 
   private async Task<RelayCredentials> PairDeviceAsync(
