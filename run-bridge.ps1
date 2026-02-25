@@ -43,7 +43,13 @@ $env:MSFS_RELAY_USER_ID = "$RelayUserId"
 $env:MSFS_RELAY_PAIR_CODE = "$RelayPairCode"
 $env:MSFS_RELAY_DEVICE_ID = "$RelayDeviceId"
 $env:MSFS_RELAY_DEVICE_TOKEN = "$RelayDeviceToken"
-$env:MSFS_RELAY_CREDENTIALS_FILE = "$RelayCredentialsFile"
+$resolvedRelayCredentialsFile = if ([System.IO.Path]::IsPathRooted($RelayCredentialsFile)) {
+  $RelayCredentialsFile
+}
+else {
+  Join-Path $PSScriptRoot $RelayCredentialsFile
+}
+$env:MSFS_RELAY_CREDENTIALS_FILE = "$resolvedRelayCredentialsFile"
 $env:MSFS_RELAY_LOOP_MS = "$RelayLoopMs"
 $env:MSFS_RELAY_STOP_AFTER_NO_TELEMETRY_SEC = "$RelayStopAfterNoTelemetrySec"
 

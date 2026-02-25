@@ -31,8 +31,17 @@ Default first run (recommended):
 What happens:
 
 1. Bridge requests a device-link challenge.
-2. Browser opens approval URL.
-3. After user approves in browser, bridge polls and stores credentials automatically.
+2. Bridge attempts background approval when relay user context is available.
+3. Browser opens approval URL only when manual approval is still required.
+4. After approval, bridge polls and stores credentials automatically.
+
+For fully automated first-run linking (recommended in production):
+
+```powershell
+.\run-bridge.ps1 -RelayEnabled -RelayUserId "<user-id>"
+```
+
+If approval page shows `Missing user context`, rerun with `-RelayUserId`.
 
 Fallback paths (advanced/manual):
 

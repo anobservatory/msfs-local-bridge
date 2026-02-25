@@ -206,7 +206,7 @@ internal sealed class BridgeOptions
   public bool HasRelayDirectCredentials => !string.IsNullOrWhiteSpace(RelayDeviceId) && !string.IsNullOrWhiteSpace(RelayDeviceToken);
   public string RelayCredentialsFilePath => Path.IsPathRooted(RelayCredentialsFile)
     ? RelayCredentialsFile
-    : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, RelayCredentialsFile));
+    : Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, RelayCredentialsFile));
 
   private BridgeOptions(
     string bindHost,
@@ -538,6 +538,7 @@ internal sealed class RelayIngestService : BackgroundService
   private const string PairCodePath = "/api/msfs/v1/pair-code";
   private const string PairDevicePath = "/api/msfs/v1/devices/pair";
   private const string DeviceLinkStartPath = "/api/msfs/v1/devices/link/start";
+  private const string DeviceLinkApprovePath = "/api/msfs/v1/devices/link/approve";
   private const string DeviceLinkPollPath = "/api/msfs/v1/devices/link/poll";
   private const string SessionStartPath = "/api/msfs/v1/devices/session/start";
   private const string SessionStopPath = "/api/msfs/v1/devices/session/stop";
@@ -650,9 +651,20 @@ internal sealed class RelayIngestService : BackgroundService
     var pairCode = await ResolvePairCodeAsync(httpClient, cancellationToken);
     if (!string.IsNullOrWhiteSpace(pairCode))
     {
-      var paired = await PairDeviceAsync(httpClient, pairCode, cancellationToken);
-      SaveRelayCredentialsToFile(paired);
-      return paired;
+      try
+      {
+        var paired = await PairDeviceAsync(httpClient, pairCode, cancellationToken);
+        SaveRelayCredentialsToFile(paired);
+        return paired;
+      }
+      catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+      {
+        throw;
+      }
+      catch (Exception ex)
+      {
+        _logger.LogWarning(ex, "Relay pair flow failed. Falling back to device-link approval flow.");
+      }
     }
 
     var linked = await TryAutoLinkDeviceAsync(httpClient, cancellationToken);
@@ -713,8 +725,22 @@ internal sealed class RelayIngestService : BackgroundService
       return null;
     }
 
-    _logger.LogInformation("Relay approval required: {VerificationUrl}", linkStart.VerificationUrl);
-    TryOpenRelayApprovalInBrowser(linkStart.VerificationUrl);
+    var approvalUrl = BuildApprovalUrlWithUserContext(linkStart.VerificationUrl, _options.RelayUserId);
+    var approvedInBackground = await TryApproveDeviceLinkAsync(
+      httpClient,
+      linkStart.LinkToken,
+      _options.RelayUserId,
+      cancellationToken
+    );
+    if (approvedInBackground)
+    {
+      _logger.LogInformation("Relay link approved via relay user context.");
+    }
+    else
+    {
+      _logger.LogInformation("Relay approval required: {VerificationUrl}", approvalUrl);
+      TryOpenRelayApprovalInBrowser(approvalUrl);
+    }
 
     var linked = await PollDeviceLinkAsync(httpClient, linkStart, cancellationToken);
     if (linked is null)
@@ -725,6 +751,55 @@ internal sealed class RelayIngestService : BackgroundService
 
     _logger.LogInformation("Relay device linked successfully ({DeviceId}).", linked.DeviceId);
     return linked;
+  }
+
+  private static string BuildApprovalUrlWithUserContext(string verificationUrl, string? relayUserId)
+  {
+    if (string.IsNullOrWhiteSpace(relayUserId))
+    {
+      return verificationUrl;
+    }
+
+    if (verificationUrl.Contains("userId=", StringComparison.Ordinal))
+    {
+      return verificationUrl;
+    }
+
+    var separator = verificationUrl.Contains('?', StringComparison.Ordinal) ? "&" : "?";
+    return $"{verificationUrl}{separator}userId={Uri.EscapeDataString(relayUserId)}";
+  }
+
+  private async Task<bool> TryApproveDeviceLinkAsync(
+    HttpClient httpClient,
+    string linkToken,
+    string? relayUserId,
+    CancellationToken cancellationToken
+  )
+  {
+    if (string.IsNullOrWhiteSpace(relayUserId))
+    {
+      return false;
+    }
+
+    using var request = new HttpRequestMessage(HttpMethod.Post, BuildRelayUri(DeviceLinkApprovePath))
+    {
+      Content = CreateJsonContent(new { linkToken }),
+    };
+    request.Headers.TryAddWithoutValidation("x-ao-user-id", relayUserId);
+
+    using var response = await httpClient.SendAsync(request, cancellationToken);
+    if (response.IsSuccessStatusCode)
+    {
+      return true;
+    }
+
+    var body = await response.Content.ReadAsStringAsync(cancellationToken);
+    _logger.LogWarning(
+      "Relay link/approve failed ({StatusCode}): {Body}",
+      (int)response.StatusCode,
+      TruncateForLog(body, 200)
+    );
+    return false;
   }
 
   private async Task<RelayDeviceLinkStart?> StartDeviceLinkAsync(
