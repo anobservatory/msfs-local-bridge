@@ -18,8 +18,8 @@ First-time setup one-page checklist:
 1. Extract `msfs-local-bridge-vX.Y.Z-self-contained.zip` on Windows (recommended).
 2. Verify both SimConnect DLL files exist in package root and `lib/`.
 3. Open normal PowerShell (not `Run as administrator`).
-4. Run `.\preflight-v0.ps1` and fix all `FAIL` items.
-5. Run `.\run-bridge.ps1` and keep the terminal open.
+4. Run `.\start-msfs-sync.ps1` (runs preflight, then starts bridge).
+5. Keep the terminal open while flying.
 6. On Mac, open `http://localhost:3000/?msfsBridgeUrl=ws://<WINDOWS_IP>:39000/stream` and choose `Display -> MSFS Local`.
 
 ## 0.0) Current release lock (v0.2.6)
@@ -90,16 +90,14 @@ Release zip (tester):
 
 ```powershell
 cd <extracted-zip-folder>
-.\preflight-v0.ps1
-.\run-bridge.ps1
+.\start-msfs-sync.ps1
 ```
 
 Source layout (developer):
 
 ```powershell
 cd tools\msfs-local-bridge
-.\preflight-v0.ps1
-.\run-bridge.ps1
+.\start-msfs-sync.ps1
 ```
 
 If script execution is blocked once, run:
@@ -108,7 +106,7 @@ If script execution is blocked once, run:
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-Then run `.\preflight-v0.ps1` and `.\run-bridge.ps1` again.
+Then run `.\start-msfs-sync.ps1` again.
 
 ## 4) Confirm it is live
 
@@ -247,7 +245,7 @@ Output:
 - `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.2.6-self-contained.zip`
 - `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.2.6-lite.zip`
 
-This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `run-bridge.ps1`, `preflight-v0.ps1`, `diagnostics-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`, `FIRST_TIME_CHECKLIST.md`) needed by testers.
+This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `start-msfs-sync.ps1`, `run-bridge.ps1`, `preflight-v0.ps1`, `diagnostics-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`, `FIRST_TIME_CHECKLIST.md`) needed by testers.
 
 ## 10) Checksum Generation and Verification (Operator)
 

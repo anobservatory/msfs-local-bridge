@@ -8,18 +8,12 @@ Scope: same-network LAN direct setup (`MSFS Windows -> Bridge -> Mac/mobile pane
 2. Run:
 
 ```powershell
-.\preflight-v0.ps1
+.\start-msfs-sync.ps1
 ```
 
-3. Fix all `FAIL` checks. (`WARN` can proceed.)
-4. Run:
-
-```powershell
-.\run-bridge.ps1
-```
-
-5. Keep this terminal open while flying.
-6. Copy one `LAN URL candidates` value from output.
+3. If preflight reports `FAIL`, fix and rerun starter.
+4. Keep this terminal open while flying.
+5. Copy one `LAN URL candidates` value from output.
 
 ## 2) On Mac
 
@@ -49,5 +43,5 @@ Run one elevated repair on Windows:
 Then restart bridge:
 
 ```powershell
-.\run-bridge.ps1
+.\start-msfs-sync.ps1
 ```
