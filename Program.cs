@@ -1086,8 +1086,11 @@ internal sealed class RelayIngestService : BackgroundService
     var heartbeatIntervalSec = Math.Clamp(session.HeartbeatIntervalSec, 5, 120);
     var telemetryRefreshIntervalSec = Math.Max(2, Math.Min(heartbeatIntervalSec, 3));
     var nextHeartbeatAt = DateTimeOffset.UtcNow.AddSeconds(heartbeatIntervalSec);
+    var nextCadenceLogAt = DateTimeOffset.UtcNow.AddSeconds(15);
     var lastSentSnapshotTs = 0L;
     var lastTelemetrySentAt = DateTimeOffset.MinValue;
+    var telemetrySentCount = 0;
+    var heartbeatSentCount = 0;
     var sessionStopSent = false;
 
     async Task PublishSnapshotAsync(
@@ -1105,6 +1108,7 @@ internal sealed class RelayIngestService : BackgroundService
       );
       lastSentSnapshotTs = snapshot.TimestampMs;
       lastTelemetrySentAt = DateTimeOffset.UtcNow;
+      telemetrySentCount += 1;
     }
 
     await PublishSnapshotAsync(initialSnapshot, relayCts.Token);
@@ -1117,11 +1121,6 @@ internal sealed class RelayIngestService : BackgroundService
         if (receiveOutcome.Value.SessionInvalid)
         {
           throw new RelayAuthorizationException(receiveOutcome.Value.Message ?? "Relay ingest session invalid.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(receiveOutcome.Value.Message))
-        {
-          _logger.LogWarning("Relay ingest closed: {Message}", receiveOutcome.Value.Message);
         }
         break;
       }
@@ -1151,6 +1150,8 @@ internal sealed class RelayIngestService : BackgroundService
       if (now >= nextHeartbeatAt)
       {
         await SendHeartbeatAsync(socket, session.SessionId, relayCts.Token);
+        heartbeatSentCount += 1;
+        _logger.LogDebug("Relay heartbeat sent ({SessionId}).", session.SessionId);
         nextHeartbeatAt = now.AddSeconds(heartbeatIntervalSec);
       }
 
@@ -1169,6 +1170,22 @@ internal sealed class RelayIngestService : BackgroundService
         break;
       }
 
+      if (now >= nextCadenceLogAt)
+      {
+        _logger.LogInformation(
+          "Relay cadence ({SessionId}): telemetrySent={TelemetryCount}, heartbeatSent={HeartbeatCount}, lastTelemetryAtMs={LastTelemetryAtMs}",
+          session.SessionId,
+          telemetrySentCount,
+          heartbeatSentCount,
+          lastTelemetrySentAt == DateTimeOffset.MinValue
+            ? null
+            : lastTelemetrySentAt.ToUnixTimeMilliseconds()
+        );
+        telemetrySentCount = 0;
+        heartbeatSentCount = 0;
+        nextCadenceLogAt = now.AddSeconds(15);
+      }
+
       await Task.Delay(_options.RelayLoopMs, stoppingToken);
     }
 
@@ -1184,6 +1201,15 @@ internal sealed class RelayIngestService : BackgroundService
       {
         receiveOutcome = null;
       }
+    }
+
+    if (!string.IsNullOrWhiteSpace(receiveOutcome?.Message))
+    {
+      _logger.LogWarning(
+        "Relay ingest closed ({SessionId}): {Message}",
+        session.SessionId,
+        receiveOutcome.Value.Message
+      );
     }
 
     if (!sessionStopSent)
@@ -1227,7 +1253,14 @@ internal sealed class RelayIngestService : BackgroundService
 
       if (result.MessageType == WebSocketMessageType.Close)
       {
-        return new RelayReceiveOutcome(false, "Relay ingest socket closed.");
+        var closeStatus = result.CloseStatus?.ToString() ?? "none";
+        var closeDescription = string.IsNullOrWhiteSpace(result.CloseStatusDescription)
+          ? "none"
+          : result.CloseStatusDescription;
+        return new RelayReceiveOutcome(
+          false,
+          $"Relay ingest socket closed ({closeStatus}; {closeDescription})."
+        );
       }
 
       if (result.Count > 0)
