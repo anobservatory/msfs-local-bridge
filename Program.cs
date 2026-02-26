@@ -2,11 +2,13 @@ using System.Globalization;
 using System.Net.WebSockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using Microsoft.FlightSimulator.SimConnect;
 
 var bridgeOptions = BridgeOptions.FromEnvironment();
+X509Certificate2? wssCertificate = null;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -20,7 +22,26 @@ builder.Services.AddSingleton(bridgeOptions);
 builder.Services.AddSingleton<OwnshipSnapshotStore>();
 builder.Services.AddHostedService<SimConnectOwnshipService>();
 
-builder.WebHost.UseUrls($"http://{bridgeOptions.BindHost}:{bridgeOptions.Port}");
+if (bridgeOptions.WssEnabled)
+{
+  wssCertificate = LoadWssCertificate(bridgeOptions);
+  builder.WebHost.ConfigureKestrel(serverOptions =>
+  {
+    serverOptions.ConfigureHttpsDefaults(httpsOptions =>
+    {
+      httpsOptions.ServerCertificate = wssCertificate;
+    });
+  });
+
+  builder.WebHost.UseUrls(
+    $"http://{bridgeOptions.BindHost}:{bridgeOptions.Port}",
+    $"https://{bridgeOptions.WssBindHost}:{bridgeOptions.WssPort}"
+  );
+}
+else
+{
+  builder.WebHost.UseUrls($"http://{bridgeOptions.BindHost}:{bridgeOptions.Port}");
+}
 
 var app = builder.Build();
 app.UseWebSockets(new WebSocketOptions
@@ -34,6 +55,11 @@ app.MapGet("/", (BridgeOptions options) => Results.Json(new
   status = "ok",
   streamPath = options.StreamPath,
   sampleIntervalMs = options.SampleIntervalMs,
+  wssEnabled = options.WssEnabled,
+  wssHost = options.WssEnabled ? options.WssPublicHost : null,
+  wssPort = options.WssEnabled ? options.WssPort : (int?)null,
+  wssCertPath = options.WssEnabled ? options.TlsCertPath : null,
+  wssKeyPath = options.WssEnabled ? options.TlsKeyPath : null,
 }));
 
 app.Map(bridgeOptions.StreamPath, async (
@@ -182,6 +208,15 @@ app.Lifetime.ApplicationStarted.Register(() =>
     bridgeOptions.Port,
     bridgeOptions.StreamPath
   );
+  if (bridgeOptions.WssEnabled)
+  {
+    app.Logger.LogInformation(
+      "MSFS bridge secure stream at wss://{PublicHost}:{WssPort}{Path}",
+      bridgeOptions.WssPublicHost,
+      bridgeOptions.WssPort,
+      bridgeOptions.StreamPath
+    );
+  }
   app.Logger.LogInformation("Start MSFS flight and keep this bridge window open.");
 });
 
@@ -206,11 +241,62 @@ static bool IsSimConnectLoadFailure(FileNotFoundException ex)
   return fileName.Contains("Microsoft.FlightSimulator.SimConnect.dll", StringComparison.OrdinalIgnoreCase);
 }
 
+static X509Certificate2 LoadWssCertificate(BridgeOptions options)
+{
+  var certPath = ResolveRuntimePath(options.TlsCertPath);
+  var keyPath = ResolveRuntimePath(options.TlsKeyPath);
+
+  if (!File.Exists(certPath))
+  {
+    throw new FileNotFoundException(
+      $"WSS certificate file not found. Set MSFS_BRIDGE_TLS_CERT_PATH or create file at '{certPath}'.",
+      certPath
+    );
+  }
+
+  if (!File.Exists(keyPath))
+  {
+    throw new FileNotFoundException(
+      $"WSS private key file not found. Set MSFS_BRIDGE_TLS_KEY_PATH or create file at '{keyPath}'.",
+      keyPath
+    );
+  }
+
+  try
+  {
+    // Kestrel expects a certificate with private key. PEM loading is normalized via PKCS#12 re-wrap.
+    var pem = X509Certificate2.CreateFromPemFile(certPath, keyPath);
+    return new X509Certificate2(pem.Export(X509ContentType.Pkcs12));
+  }
+  catch (Exception ex)
+  {
+    throw new InvalidOperationException(
+      $"Failed to load WSS certificate from cert='{certPath}', key='{keyPath}'.",
+      ex
+    );
+  }
+}
+
+static string ResolveRuntimePath(string path)
+{
+  if (Path.IsPathRooted(path))
+  {
+    return path;
+  }
+  return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, path));
+}
+
 internal sealed class BridgeOptions
 {
   public string BindHost { get; }
   public int Port { get; }
   public string StreamPath { get; }
+  public bool WssEnabled { get; }
+  public string WssBindHost { get; }
+  public int WssPort { get; }
+  public string WssPublicHost { get; }
+  public string TlsCertPath { get; }
+  public string TlsKeyPath { get; }
   public int SampleIntervalMs { get; }
   public int SimConnectPollMs { get; }
   public int ReconnectDelayMs { get; }
@@ -225,6 +311,12 @@ internal sealed class BridgeOptions
     string bindHost,
     int port,
     string streamPath,
+    bool wssEnabled,
+    string wssBindHost,
+    int wssPort,
+    string wssPublicHost,
+    string tlsCertPath,
+    string tlsKeyPath,
     int sampleIntervalMs,
     int simConnectPollMs,
     int reconnectDelayMs,
@@ -239,6 +331,12 @@ internal sealed class BridgeOptions
     BindHost = bindHost;
     Port = port;
     StreamPath = streamPath;
+    WssEnabled = wssEnabled;
+    WssBindHost = wssBindHost;
+    WssPort = wssPort;
+    WssPublicHost = wssPublicHost;
+    TlsCertPath = tlsCertPath;
+    TlsKeyPath = tlsKeyPath;
     SampleIntervalMs = sampleIntervalMs;
     SimConnectPollMs = simConnectPollMs;
     ReconnectDelayMs = reconnectDelayMs;
@@ -255,6 +353,12 @@ internal sealed class BridgeOptions
     var bindHost = ReadString("MSFS_BRIDGE_BIND", "0.0.0.0");
     var port = ReadInt("MSFS_BRIDGE_PORT", fallback: 39000, min: 1025, max: 65535);
     var streamPath = NormalizePath(ReadString("MSFS_BRIDGE_PATH", "/stream"));
+    var wssEnabled = ReadBool("MSFS_BRIDGE_WSS_ENABLED", false);
+    var wssBindHost = ReadString("MSFS_BRIDGE_WSS_BIND", bindHost);
+    var wssPort = ReadInt("MSFS_BRIDGE_WSS_PORT", fallback: 39002, min: 1025, max: 65535);
+    var wssPublicHost = ReadString("MSFS_BRIDGE_PUBLIC_WSS_HOST", "ao.home.arpa");
+    var tlsCertPath = ReadString("MSFS_BRIDGE_TLS_CERT_PATH", Path.Combine("certs", "ao.home.arpa.pem"));
+    var tlsKeyPath = ReadString("MSFS_BRIDGE_TLS_KEY_PATH", Path.Combine("certs", "ao.home.arpa-key.pem"));
     var sampleIntervalMs = ReadInt("MSFS_BRIDGE_SAMPLE_MS", fallback: 200, min: 80, max: 2000);
     var simConnectPollMs = ReadInt("MSFS_BRIDGE_POLL_MS", fallback: 25, min: 5, max: 1000);
     var reconnectDelayMs = ReadInt("MSFS_BRIDGE_RECONNECT_MS", fallback: 2000, min: 500, max: 30000);
@@ -270,6 +374,12 @@ internal sealed class BridgeOptions
       bindHost: bindHost,
       port: port,
       streamPath: streamPath,
+      wssEnabled: wssEnabled,
+      wssBindHost: wssBindHost,
+      wssPort: wssPort,
+      wssPublicHost: wssPublicHost,
+      tlsCertPath: tlsCertPath,
+      tlsKeyPath: tlsKeyPath,
       sampleIntervalMs: sampleIntervalMs,
       simConnectPollMs: simConnectPollMs,
       reconnectDelayMs: reconnectDelayMs,
@@ -290,6 +400,31 @@ internal sealed class BridgeOptions
       return fallback;
     }
     return value.Trim();
+  }
+
+  private static bool ReadBool(string name, bool fallback)
+  {
+    var raw = Environment.GetEnvironmentVariable(name);
+    if (string.IsNullOrWhiteSpace(raw))
+    {
+      return fallback;
+    }
+
+    var normalized = raw.Trim().ToLowerInvariant();
+    return normalized switch
+    {
+      "1" => true,
+      "true" => true,
+      "yes" => true,
+      "y" => true,
+      "on" => true,
+      "0" => false,
+      "false" => false,
+      "no" => false,
+      "n" => false,
+      "off" => false,
+      _ => fallback,
+    };
   }
 
   private static int ReadInt(string name, int fallback, int min, int max)

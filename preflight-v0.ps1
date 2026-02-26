@@ -1,5 +1,8 @@
 param(
   [int]$Port = 39000,
+  [int]$WssPort = 39002,
+  [string]$LocalDomain = "ao.home.arpa",
+  [string]$CertDir = "certs",
   [switch]$Strict
 )
 
@@ -126,6 +129,102 @@ function Get-PrivateLanIPv4 {
   return @($candidates | Select-Object -Unique)
 }
 
+function Resolve-PathUnderRoot {
+  param(
+    [string]$Root,
+    [string]$PathValue
+  )
+
+  if ([System.IO.Path]::IsPathRooted($PathValue)) {
+    return [System.IO.Path]::GetFullPath($PathValue)
+  }
+
+  return [System.IO.Path]::GetFullPath((Join-Path $Root $PathValue))
+}
+
+function Get-SafeCertBaseName {
+  param([string]$Domain)
+  return ($Domain -replace '[^a-zA-Z0-9._-]', '_')
+}
+
+function Find-MkcertPath {
+  $command = Get-Command mkcert -ErrorAction SilentlyContinue
+  if ($null -ne $command -and $command.Source -and (Test-Path $command.Source)) {
+    return [System.IO.Path]::GetFullPath($command.Source)
+  }
+
+  $candidatePaths = @(
+    (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\mkcert.exe"),
+    (Join-Path $env:ProgramData "chocolatey\bin\mkcert.exe"),
+    (Join-Path $env:ProgramFiles "mkcert\mkcert.exe"),
+    (Join-Path $env:ProgramFiles "mkcert\bin\mkcert.exe")
+  )
+
+  $programFilesX86 = ${env:ProgramFiles(x86)}
+  if ($programFilesX86) {
+    $candidatePaths += (Join-Path $programFilesX86 "mkcert\mkcert.exe")
+    $candidatePaths += (Join-Path $programFilesX86 "mkcert\bin\mkcert.exe")
+  }
+
+  foreach ($candidate in ($candidatePaths | Where-Object { $_ } | Select-Object -Unique)) {
+    if (Test-Path $candidate) {
+      return [System.IO.Path]::GetFullPath($candidate)
+    }
+  }
+
+  try {
+    $whereMatches = @(& where.exe mkcert 2>$null)
+    foreach ($match in $whereMatches) {
+      if ($match -and (Test-Path $match.Trim())) {
+        return [System.IO.Path]::GetFullPath($match.Trim())
+      }
+    }
+  }
+  catch {
+    # Ignore where.exe failures.
+  }
+
+  return $null
+}
+
+function Test-PortAvailability {
+  param([int]$RulePort)
+
+  $portLines = @(netstat -ano | Select-String ":$RulePort")
+  $listeningLines = @($portLines | Where-Object { $_.Line -match "LISTENING" })
+
+  if ($listeningLines.Count -eq 0) {
+    Write-Check -Status PASS -Message "TCP $RulePort is free (no current LISTENING process)"
+    return
+  }
+
+  foreach ($entry in $listeningLines) {
+    $line = ($entry.Line -replace "\s+", " ").Trim()
+    $parts = $line.Split(" ")
+    $pidText = $parts[-1]
+
+    $parsedPid = 0
+    if (-not [int]::TryParse($pidText, [ref]$parsedPid)) {
+      Write-Check -Status WARN -Message "Unable to parse PID from: $line"
+      continue
+    }
+
+    $pid = $parsedPid
+    $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
+    if ($null -eq $process) {
+      Write-Check -Status WARN -Message "TCP $RulePort in use by PID $pid (process not found)"
+      continue
+    }
+
+    if ($process.ProcessName -eq "node") {
+      Write-Check -Status WARN -Message "TCP $RulePort in use by node.exe (likely mock sender)"
+    }
+    else {
+      Write-Check -Status WARN -Message "TCP $RulePort already in use by $($process.ProcessName).exe (PID $pid)"
+    }
+  }
+}
+
 Write-Host "MSFS Local Bridge v0 Preflight" -ForegroundColor Cyan
 Write-Host "Project: $PSScriptRoot"
 Write-Host ""
@@ -207,7 +306,8 @@ $lanIps = Get-PrivateLanIPv4
 if ($lanIps.Count -gt 0) {
   $preview = @($lanIps | Select-Object -First 2)
   $sampleUrl = "ws://$($preview[0]):$Port/stream"
-  Write-Check -Status PASS -Message "Private LAN IPv4 detected: $($preview -join ', ') (sample bridge URL: $sampleUrl)"
+  $sampleSecureUrl = "wss://$LocalDomain`:$WssPort/stream"
+  Write-Check -Status PASS -Message "Private LAN IPv4 detected: $($preview -join ', ') (sample bridge URL: $sampleUrl, sample secure URL: $sampleSecureUrl)"
 }
 else {
   Write-Check -Status WARN -Message "No private LAN IPv4 detected. Verify same-network setup before split-device sync."
@@ -220,6 +320,15 @@ else {
   Write-Check -Status WARN -Message "Managed firewall rule not found for inbound TCP $Port (needed when Mac/mobile cannot connect)."
   Write-Host "  -> Repair: Run as Administrator:"
   Write-Host "     .\repair-elevated-v0.ps1 -Action OpenFirewall39000 -Port $Port"
+}
+
+if (Test-ManagedFirewallRule -RulePort $WssPort) {
+  Write-Check -Status PASS -Message "Managed firewall rule present for inbound TCP $WssPort."
+}
+else {
+  Write-Check -Status WARN -Message "Managed firewall rule not found for inbound TCP $WssPort (needed for WSS clients)."
+  Write-Host "  -> Repair: Run as Administrator:"
+  Write-Host "     .\repair-elevated-v0.ps1 -Action OpenFirewall39002 -Port $WssPort"
 }
 
 $vcDisplayNames = @(
@@ -275,38 +384,38 @@ else {
   Write-Check -Status WARN -Message "Visual C++ Redistributable (x64) not detected (bridge can still work if already present by policy/runtime image)"
 }
 
-$portLines = @(netstat -ano | Select-String ":$Port")
-$listeningLines = @($portLines | Where-Object { $_.Line -match "LISTENING" })
+$safeCertBase = Get-SafeCertBaseName -Domain $LocalDomain
+$certRoot = Resolve-PathUnderRoot -Root $PSScriptRoot -PathValue $CertDir
+$certPath = Join-Path $certRoot "$safeCertBase.pem"
+$keyPath = Join-Path $certRoot "$safeCertBase-key.pem"
 
-if ($listeningLines.Count -eq 0) {
-  Write-Check -Status PASS -Message "TCP $Port is free (no current LISTENING process)"
+if (Test-Path $certPath) {
+  Write-Check -Status PASS -Message "WSS certificate found: $certPath"
 }
 else {
-  foreach ($entry in $listeningLines) {
-    $line = ($entry.Line -replace "\s+", " ").Trim()
-    $parts = $line.Split(" ")
-    $pidText = $parts[-1]
+  Write-Check -Status WARN -Message "WSS certificate missing: $certPath"
+}
 
-    $parsedPid = 0
-    if (-not [int]::TryParse($pidText, [ref]$parsedPid)) {
-      Write-Check -Status WARN -Message "Unable to parse PID from: $line"
-      continue
-    }
+if (Test-Path $keyPath) {
+  Write-Check -Status PASS -Message "WSS key found: $keyPath"
+}
+else {
+  Write-Check -Status WARN -Message "WSS key missing: $keyPath"
+}
 
-    $pid = $parsedPid
-    $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
-    if ($null -eq $process) {
-      Write-Check -Status WARN -Message "TCP $Port in use by PID $pid (process not found)"
-      continue
-    }
+$mkcertPath = Find-MkcertPath
+if ($null -ne $mkcertPath) {
+  Write-Check -Status PASS -Message "mkcert found: $mkcertPath"
+}
+else {
+  Write-Check -Status WARN -Message "mkcert not found (needed for first-time WSS certificate setup)"
+  Write-Host "  -> Repair: Install mkcert then run:"
+  Write-Host "     .\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`""
+}
 
-    if ($process.ProcessName -eq "node") {
-      Write-Check -Status WARN -Message "TCP $Port in use by node.exe (likely mock sender)"
-    }
-    else {
-      Write-Check -Status WARN -Message "TCP $Port already in use by $($process.ProcessName).exe (PID $pid)"
-    }
-  }
+Test-PortAvailability -RulePort $Port
+if ($WssPort -ne $Port) {
+  Test-PortAvailability -RulePort $WssPort
 }
 
 Write-Host ""

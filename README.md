@@ -4,6 +4,7 @@ This folder contains a Windows console bridge:
 
 - `MSFS SimConnect` -> `WebSocket stream`
 - Stream endpoint: `ws://<windows-ip>:39000/stream`
+- Secure stream endpoint (when cert is configured): `wss://ao.home.arpa:39002/stream`
 - Payload shape matches `src/services/msfs/msfsClient.ts`
 
 If you are flying at KJFK but the app shows a fixed C172 around KSFO, that usually means a mock sender is running.  
@@ -20,7 +21,7 @@ First-time setup one-page checklist:
 3. Open normal PowerShell (not `Run as administrator`).
 4. Run `.\start-msfs-sync.ps1` (runs preflight, then starts bridge).
 5. Keep the terminal open while flying.
-6. On Mac, open `http://localhost:3000/?msfsBridgeUrl=ws://<WINDOWS_IP>:39000/stream` and choose `Display -> MSFS Local`.
+6. Open `https://anobservatory.com/?msfsBridgeUrl=wss://ao.home.arpa:39002/stream` and choose `Display -> MSFS Local`.
 
 ## 0.0) Current release lock (v0.2.7)
 
@@ -130,15 +131,22 @@ Should return JSON like:
 
 ## 5) Connect Mac web app
 
-Recommended (no `.env.local` edit):
+Recommended WSS-first flow (no `.env.local` edit):
 
 1. Use one URL when opening local panel:
 
 ```text
-http://localhost:3000/?msfsBridgeUrl=ws://<WINDOWS_IP>:39000/stream
+https://anobservatory.com/?msfsBridgeUrl=wss://ao.home.arpa:39002/stream
 ```
 
 2. This value is persisted in browser local storage for next runs.
+3. One-time setup on listener device: trust local cert and map `ao.home.arpa -> <WINDOWS_IP>`.
+
+Fallback WS/local-dev flow:
+
+```text
+http://localhost:3000/?msfsBridgeUrl=ws://<WINDOWS_IP>:39000/stream
+```
 
 Legacy env-based method:
 
@@ -154,8 +162,8 @@ npm run dev
 
 ## 6) Firewalls and network
 
-1. Windows and Mac must be on same LAN.
-2. Allow inbound TCP `39000` on Windows (Private network).
+1. Windows and listener device must be on same LAN.
+2. Allow inbound TCP `39000` and `39002` on Windows (Private network).
 3. Keep bridge terminal open while flying.
 
 Optional elevated repair helper:
@@ -164,6 +172,9 @@ Optional elevated repair helper:
 .\repair-elevated-v0.ps1 -Action ShowFirewall39000
 .\repair-elevated-v0.ps1 -Action OpenFirewall39000
 .\repair-elevated-v0.ps1 -Action RemoveFirewall39000
+.\repair-elevated-v0.ps1 -Action ShowFirewall39002 -Port 39002
+.\repair-elevated-v0.ps1 -Action OpenFirewall39002 -Port 39002
+.\repair-elevated-v0.ps1 -Action RemoveFirewall39002 -Port 39002
 ```
 
 Quick diagnostics helper:
@@ -204,6 +215,10 @@ Quick diagnostics helper:
 11. Running bridge as Administrator by default:
    - not required for normal sync
    - use standard user shell unless a specific repair action requests elevation
+12. WSS URL fails with cert warning or `ERR_CERT`:
+   - run `.\setup-wss-cert-v0.ps1 -LocalDomain ao.home.arpa`
+   - trust generated local CA/cert on listener device
+   - verify hosts/DNS maps `ao.home.arpa` to Windows bridge IP
 
 ## 8) Optional runtime env vars
 
@@ -212,6 +227,11 @@ Defaults are safe for first run.
 - `MSFS_BRIDGE_BIND` default: `0.0.0.0`
 - `MSFS_BRIDGE_PORT` default: `39000`
 - `MSFS_BRIDGE_PATH` default: `/stream`
+- `MSFS_BRIDGE_WSS_ENABLED` default: `false` (enabled automatically by `run-bridge.ps1` when cert exists)
+- `MSFS_BRIDGE_WSS_PORT` default: `39002`
+- `MSFS_BRIDGE_PUBLIC_WSS_HOST` default: `ao.home.arpa`
+- `MSFS_BRIDGE_TLS_CERT_PATH` default: `certs/ao.home.arpa.pem`
+- `MSFS_BRIDGE_TLS_KEY_PATH` default: `certs/ao.home.arpa-key.pem`
 - `MSFS_BRIDGE_SAMPLE_MS` default: `200`
 - `MSFS_BRIDGE_POLL_MS` default: `25`
 - `MSFS_BRIDGE_RECONNECT_MS` default: `2000` (initial reconnect delay)
@@ -245,7 +265,7 @@ Output:
 - `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.2.7-self-contained.zip`
 - `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.2.7-lite.zip`
 
-This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `start-msfs-sync.ps1`, `run-bridge.ps1`, `preflight-v0.ps1`, `diagnostics-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`, `FIRST_TIME_CHECKLIST.md`) needed by testers.
+This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `start-msfs-sync.ps1`, `run-bridge.ps1`, `setup-wss-cert-v0.ps1`, `preflight-v0.ps1`, `diagnostics-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`, `FIRST_TIME_CHECKLIST.md`) needed by testers.
 
 ## 10) Checksum Generation and Verification (Operator)
 

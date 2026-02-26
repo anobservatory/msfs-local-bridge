@@ -1,12 +1,17 @@
 param(
   [string]$BindHost = "0.0.0.0",
   [int]$Port = 39000,
+  [int]$WssPort = 39002,
+  [string]$LocalDomain = "ao.home.arpa",
+  [string]$CertDir = "certs",
   [string]$StreamPath = "/stream",
   [int]$SampleIntervalMs = 200,
   [int]$PollIntervalMs = 25,
   [int]$ReconnectDelayMs = 2000,
   [int]$ReconnectMaxDelayMs = 10000,
-  [switch]$SkipLanHints
+  [switch]$SkipLanHints,
+  [switch]$DisableWss,
+  [switch]$RequireWss
 )
 
 $ErrorActionPreference = "Stop"
@@ -93,6 +98,24 @@ function Test-ManagedFirewallRule {
   }
 }
 
+function Get-SafeCertBaseName {
+  param([string]$Domain)
+  return ($Domain -replace '[^a-zA-Z0-9._-]', '_')
+}
+
+function Resolve-PathUnderRoot {
+  param(
+    [string]$Root,
+    [string]$PathValue
+  )
+
+  if ([System.IO.Path]::IsPathRooted($PathValue)) {
+    return [System.IO.Path]::GetFullPath($PathValue)
+  }
+
+  return [System.IO.Path]::GetFullPath((Join-Path $Root $PathValue))
+}
+
 $env:MSFS_BRIDGE_BIND = "$BindHost"
 $env:MSFS_BRIDGE_PORT = "$Port"
 $env:MSFS_BRIDGE_PATH = "$StreamPath"
@@ -100,6 +123,35 @@ $env:MSFS_BRIDGE_SAMPLE_MS = "$SampleIntervalMs"
 $env:MSFS_BRIDGE_POLL_MS = "$PollIntervalMs"
 $env:MSFS_BRIDGE_RECONNECT_MS = "$ReconnectDelayMs"
 $env:MSFS_BRIDGE_RECONNECT_MAX_MS = "$ReconnectMaxDelayMs"
+
+$safeCertBase = Get-SafeCertBaseName -Domain $LocalDomain
+$certRoot = Resolve-PathUnderRoot -Root $PSScriptRoot -PathValue $CertDir
+$certPath = Join-Path $certRoot "$safeCertBase.pem"
+$keyPath = Join-Path $certRoot "$safeCertBase-key.pem"
+$wssRequested = -not $DisableWss
+$wssReady = $false
+
+if ($wssRequested) {
+  if ((Test-Path $certPath) -and (Test-Path $keyPath)) {
+    $wssReady = $true
+  }
+  elseif ($RequireWss) {
+    throw "WSS is required but certificate files are missing. Expected cert='$certPath', key='$keyPath'. Run .\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain"
+  }
+
+  if (-not $wssReady) {
+    Write-Host "[WARN] WSS certificate files are missing; starting in WS-only mode." -ForegroundColor Yellow
+    Write-Host "[HINT] Generate certs:" -ForegroundColor Yellow
+    Write-Host "  .\\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`"" -ForegroundColor Yellow
+  }
+}
+
+$env:MSFS_BRIDGE_WSS_ENABLED = if ($wssReady) { "true" } else { "false" }
+$env:MSFS_BRIDGE_WSS_BIND = "$BindHost"
+$env:MSFS_BRIDGE_WSS_PORT = "$WssPort"
+$env:MSFS_BRIDGE_PUBLIC_WSS_HOST = "$LocalDomain"
+$env:MSFS_BRIDGE_TLS_CERT_PATH = "$certPath"
+$env:MSFS_BRIDGE_TLS_KEY_PATH = "$keyPath"
 
 $isAdmin = Test-IsAdministrator
 if ($isAdmin) {
@@ -114,6 +166,9 @@ else {
 Write-Host "Starting MSFS Local Bridge..."
 Write-Host "  bind:   ws://$BindHost`:$Port$StreamPath"
 Write-Host "  local:  ws://127.0.0.1`:$Port$StreamPath"
+if ($wssReady) {
+  Write-Host "  secure: wss://$LocalDomain`:$WssPort$StreamPath"
+}
 
 if (-not $SkipLanHints) {
   $lanIps = Get-PrivateLanIPv4
@@ -128,6 +183,12 @@ if (-not $SkipLanHints) {
     $encodedPreferredUrl = [System.Uri]::EscapeDataString($preferredUrl)
     Write-Host "  Quick open from Mac browser:"
     Write-Host "    http://localhost:3000/?msfsBridgeUrl=$encodedPreferredUrl"
+    if ($wssReady) {
+      $secureUrl = "wss://$LocalDomain`:$WssPort$StreamPath"
+      $encodedSecureUrl = [System.Uri]::EscapeDataString($secureUrl)
+      Write-Host "  Quick open on anobservatory.com:"
+      Write-Host "    https://anobservatory.com/?msfsBridgeUrl=$encodedSecureUrl"
+    }
   }
   else {
     Write-Host "  [WARN] Could not detect private LAN IPv4 automatically." -ForegroundColor Yellow
@@ -141,6 +202,17 @@ if (-not $SkipLanHints) {
     Write-Host "  [WARN] Managed firewall rule is not present for TCP $Port." -ForegroundColor Yellow
     Write-Host "  [HINT] If another device cannot connect, run (Admin):" -ForegroundColor Yellow
     Write-Host "    .\\repair-elevated-v0.ps1 -Action OpenFirewall39000 -Port $Port" -ForegroundColor Yellow
+  }
+
+  if ($wssReady) {
+    if (Test-ManagedFirewallRule -RulePort $WssPort) {
+      Write-Host "  [PASS] Managed firewall rule is present for TCP $WssPort." -ForegroundColor Green
+    }
+    else {
+      Write-Host "  [WARN] Managed firewall rule is not present for TCP $WssPort." -ForegroundColor Yellow
+      Write-Host "  [HINT] If WSS clients cannot connect, run (Admin):" -ForegroundColor Yellow
+      Write-Host "    .\\repair-elevated-v0.ps1 -Action OpenFirewall39002 -Port $WssPort" -ForegroundColor Yellow
+    }
   }
 }
 

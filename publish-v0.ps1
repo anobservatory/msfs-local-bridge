@@ -61,6 +61,7 @@ Copy-Item (Join-Path $projectRoot "README.md") (Join-Path $packageRoot "README.m
 Copy-Item (Join-Path $projectRoot "FIRST_TIME_CHECKLIST.md") (Join-Path $packageRoot "FIRST_TIME_CHECKLIST.md") -Force
 Copy-Item (Join-Path $projectRoot "start-msfs-sync.ps1") (Join-Path $packageRoot "start-msfs-sync.ps1") -Force
 Copy-Item (Join-Path $projectRoot "run-bridge.ps1") (Join-Path $packageRoot "run-bridge.ps1") -Force
+Copy-Item (Join-Path $projectRoot "setup-wss-cert-v0.ps1") (Join-Path $packageRoot "setup-wss-cert-v0.ps1") -Force
 Copy-Item (Join-Path $projectRoot "preflight-v0.ps1") (Join-Path $packageRoot "preflight-v0.ps1") -Force
 Copy-Item (Join-Path $projectRoot "repair-elevated-v0.ps1") (Join-Path $packageRoot "repair-elevated-v0.ps1") -Force
 Copy-Item (Join-Path $projectRoot "diagnostics-v0.ps1") (Join-Path $packageRoot "diagnostics-v0.ps1") -Force
