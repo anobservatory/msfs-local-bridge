@@ -53,18 +53,23 @@ app.Map(bridgeOptions.StreamPath, async (
   using var socket = await context.WebSockets.AcceptWebSocketAsync();
   var logger = loggerFactory.CreateLogger("MsfsLocalBridge.Socket");
   logger.LogInformation("WebSocket connected from {RemoteIp}", context.Connection.RemoteIpAddress);
+  var cadenceWindowStartedAt = DateTimeOffset.UtcNow;
+  var cadenceTelemetrySent = 0;
+  DateTimeOffset? waitingTelemetryLoggedAt = null;
 
   try
   {
     while (!context.RequestAborted.IsCancellationRequested && socket.State == WebSocketState.Open)
     {
+      var emittedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
       if (snapshotStore.TryRead(out var snapshot))
       {
+        waitingTelemetryLoggedAt = null;
         var payload = new
         {
           source = "msfs_local",
           version = 1,
-          ts = snapshot.TimestampMs,
+          ts = emittedAtMs,
           sessionMeta = new
           {
             hasPairedDevice = true,
@@ -74,8 +79,9 @@ app.Map(bridgeOptions.StreamPath, async (
             companionVersion = options.CompanionVersion,
             simPlatform = options.SimPlatform,
             simVersion = snapshot.SimVersionLabel,
-            lastHeartbeatAtMs = snapshot.TimestampMs,
-            lastTelemetryAtMs = snapshot.TimestampMs,
+            lastHeartbeatAtMs = emittedAtMs,
+            lastTelemetryAtMs = emittedAtMs,
+            lastSimSampleAtMs = snapshot.TimestampMs,
           },
           ownship = new
           {
@@ -103,6 +109,35 @@ app.Map(bridgeOptions.StreamPath, async (
           true,
           context.RequestAborted
         );
+
+        cadenceTelemetrySent += 1;
+        var now = DateTimeOffset.UtcNow;
+        if ((now - cadenceWindowStartedAt) >= TimeSpan.FromSeconds(15))
+        {
+          var sampleAgeMs = Math.Max(0, emittedAtMs - snapshot.TimestampMs);
+          logger.LogInformation(
+            "Bridge cadence to {RemoteIp}: telemetrySent={TelemetrySent}, sampleAgeMs={SampleAgeMs}",
+            context.Connection.RemoteIpAddress,
+            cadenceTelemetrySent,
+            sampleAgeMs
+          );
+          cadenceWindowStartedAt = now;
+          cadenceTelemetrySent = 0;
+        }
+      }
+      else
+      {
+        var now = DateTimeOffset.UtcNow;
+        var shouldLogWaiting = waitingTelemetryLoggedAt is null
+          || (now - waitingTelemetryLoggedAt.Value) >= TimeSpan.FromSeconds(15);
+        if (shouldLogWaiting)
+        {
+          logger.LogInformation(
+            "WebSocket connected from {RemoteIp} but waiting for first ownship telemetry.",
+            context.Connection.RemoteIpAddress
+          );
+          waitingTelemetryLoggedAt = now;
+        }
       }
 
       await Task.Delay(options.SampleIntervalMs, context.RequestAborted);
@@ -130,7 +165,12 @@ app.Map(bridgeOptions.StreamPath, async (
       }
     }
 
-    logger.LogInformation("WebSocket closed for {RemoteIp}", context.Connection.RemoteIpAddress);
+    logger.LogInformation(
+      "WebSocket closed for {RemoteIp} (closeStatus={CloseStatus}, description={CloseDescription})",
+      context.Connection.RemoteIpAddress,
+      socket.CloseStatus?.ToString() ?? "None",
+      socket.CloseStatusDescription ?? string.Empty
+    );
   }
 });
 
