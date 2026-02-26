@@ -1,3 +1,0 @@
-fe6c81dbd3119b636f4dcfda57116b5dd1c499568b9c6f3aa190f3f733de3363  dist/msfs-local-bridge-v0.1.3-self-contained.zip
-6005d48e1ee2690cbc51f22e92b4ea5ec7185b1c3707b87ce910e46182852613  dist/msfs-local-bridge-v0.1.3-lite.zip
-f36c31a67c975bbb78b8bba1d92fd1512eb55e5e333d25275f678b85669a69fc  dist/msfs-local-bridge-source-v0.1.3.zip
