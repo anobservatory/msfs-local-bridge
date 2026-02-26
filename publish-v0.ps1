@@ -1,5 +1,5 @@
 param(
-  [string]$Version = "0.2.6",
+  [string]$Version = "0.2.7",
   [string]$Configuration = "Release",
   [ValidateSet("self-contained", "lite")]
   [string]$Package = "self-contained"

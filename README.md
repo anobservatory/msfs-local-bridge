@@ -22,11 +22,11 @@ First-time setup one-page checklist:
 5. Keep the terminal open while flying.
 6. On Mac, open `http://localhost:3000/?msfsBridgeUrl=ws://<WINDOWS_IP>:39000/stream` and choose `Display -> MSFS Local`.
 
-## 0.0) Current release lock (v0.2.6)
+## 0.0) Current release lock (v0.2.7)
 
-1. Source package: `tools/msfs-local-bridge/dist/msfs-local-bridge-source-v0.2.6.zip`
-2. SHA256 manifest: `tools/msfs-local-bridge/SHA256SUMS-v0.2.6.txt`
-3. Git tag: `v0.2.6`
+1. Source package: `tools/msfs-local-bridge/dist/msfs-local-bridge-source-v0.2.7.zip`
+2. SHA256 manifest: `tools/msfs-local-bridge/SHA256SUMS-v0.2.7.txt`
+3. Git tag: `v0.2.7`
 
 ## 0.1) Privilege policy (V1 baseline)
 
@@ -230,20 +230,20 @@ Build portable release zip (recommended self-contained):
 
 ```powershell
 cd tools\msfs-local-bridge
-.\publish-v0.ps1 -Version 0.2.6 -Package self-contained
+.\publish-v0.ps1 -Version 0.2.7 -Package self-contained
 ```
 
 Build lite zip (.NET required on tester machine):
 
 ```powershell
 cd tools\msfs-local-bridge
-.\publish-v0.ps1 -Version 0.2.6 -Package lite
+.\publish-v0.ps1 -Version 0.2.7 -Package lite
 ```
 
 Output:
 
-- `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.2.6-self-contained.zip`
-- `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.2.6-lite.zip`
+- `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.2.7-self-contained.zip`
+- `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.2.7-lite.zip`
 
 This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `start-msfs-sync.ps1`, `run-bridge.ps1`, `preflight-v0.ps1`, `diagnostics-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`, `FIRST_TIME_CHECKLIST.md`) needed by testers.
 
@@ -252,30 +252,30 @@ This package excludes source `bin/obj` clutter and includes runtime bridge files
 Generate checksums for release artifacts:
 
 ```powershell
-Get-FileHash .\dist\msfs-local-bridge-v0.2.6-self-contained.zip -Algorithm SHA256
-Get-FileHash .\dist\msfs-local-bridge-v0.2.6-lite.zip -Algorithm SHA256
-Get-FileHash .\dist\msfs-local-bridge-source-v0.2.6.zip -Algorithm SHA256
+Get-FileHash .\dist\msfs-local-bridge-v0.2.7-self-contained.zip -Algorithm SHA256
+Get-FileHash .\dist\msfs-local-bridge-v0.2.7-lite.zip -Algorithm SHA256
+Get-FileHash .\dist\msfs-local-bridge-source-v0.2.7.zip -Algorithm SHA256
 ```
 
 Canonical manifest file:
 
-- `tools/msfs-local-bridge/SHA256SUMS-v0.2.6.txt`
+- `tools/msfs-local-bridge/SHA256SUMS-v0.2.7.txt`
 
 ## 11) Version Tagging Rule (Release)
 
 Use a semantic git tag and matching package version:
 
-1. Git tag format: `vMAJOR.MINOR.PATCH` (example: `v0.2.6`)
+1. Git tag format: `vMAJOR.MINOR.PATCH` (example: `v0.2.7`)
 2. Publish arguments:
-   - `.\publish-v0.ps1 -Version 0.2.6 -Package self-contained`
-   - `.\publish-v0.ps1 -Version 0.2.6 -Package lite`
+   - `.\publish-v0.ps1 -Version 0.2.7 -Package self-contained`
+   - `.\publish-v0.ps1 -Version 0.2.7 -Package lite`
 3. Output packages:
-   - `msfs-local-bridge-v0.2.6-self-contained.zip`
-   - `msfs-local-bridge-v0.2.6-lite.zip`
+   - `msfs-local-bridge-v0.2.7-self-contained.zip`
+   - `msfs-local-bridge-v0.2.7-lite.zip`
 
 Release command example:
 
 ```bash
-git tag v0.2.6
-git push origin v0.2.6
+git tag v0.2.7
+git push origin v0.2.7
 ```
