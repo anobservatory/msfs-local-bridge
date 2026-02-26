@@ -36,6 +36,77 @@ function Test-IsAdministrator {
   }
 }
 
+function Get-FirewallRuleName {
+  param([int]$RulePort)
+  return "AO MSFS Bridge TCP $RulePort (Private)"
+}
+
+function Test-ManagedFirewallRule {
+  param([int]$RulePort)
+  try {
+    $ruleName = Get-FirewallRuleName -RulePort $RulePort
+    $rules = @(Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue |
+      Where-Object {
+        $_.Enabled -eq "True" -and
+        $_.Direction -eq "Inbound" -and
+        $_.Action -eq "Allow"
+      })
+    return $rules.Count -gt 0
+  }
+  catch {
+    return $false
+  }
+}
+
+function Get-PrivateLanIPv4 {
+  $candidates = New-Object System.Collections.Generic.List[string]
+  try {
+    $netIps = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+      Where-Object {
+        $_.IPAddress -and
+        $_.IPAddress -ne "127.0.0.1" -and
+        $_.IPAddress -notlike "169.254.*" -and
+        $_.AddressState -eq "Preferred"
+      } |
+      Select-Object -ExpandProperty IPAddress -Unique)
+
+    foreach ($ip in $netIps) {
+      if ($ip -match '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)') {
+        $candidates.Add($ip) | Out-Null
+      }
+    }
+  }
+  catch {
+    # Fallback below if Get-NetIPAddress is unavailable.
+  }
+
+  if ($candidates.Count -eq 0) {
+    try {
+      $hostName = [System.Net.Dns]::GetHostName()
+      $dnsIps = @([System.Net.Dns]::GetHostAddresses($hostName) |
+        Where-Object {
+          $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork
+        } |
+        ForEach-Object { $_.IPAddressToString })
+
+      foreach ($ip in $dnsIps) {
+        if (
+          $ip -ne "127.0.0.1" -and
+          $ip -notlike "169.254.*" -and
+          $ip -match '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)'
+        ) {
+          $candidates.Add($ip) | Out-Null
+        }
+      }
+    }
+    catch {
+      # Ignore DNS lookup failures.
+    }
+  }
+
+  return @($candidates | Select-Object -Unique)
+}
+
 function Write-TextCheck {
   param(
     [string]$Status,
@@ -176,6 +247,23 @@ if ($vcEntries.Count -gt 0 -or $vcRuntimeDetected) {
 }
 else {
   Add-Check -Id "dependency.vc_redist_x64" -Status "warn" -Message "Visual C++ Redistributable (x64) not detected" -RepairAction "Install Microsoft Visual C++ 2015-2022 Redistributable (x64)."
+}
+
+$lanIps = Get-PrivateLanIPv4
+if ($lanIps.Count -gt 0) {
+  $preview = @($lanIps | Select-Object -First 3)
+  $sampleUrl = "ws://$($preview[0]):$Port/stream"
+  Add-Check -Id "network.lan_ipv4" -Status "pass" -Message "Private LAN IPv4 detected: $($preview -join ', ') (sample: $sampleUrl)"
+}
+else {
+  Add-Check -Id "network.lan_ipv4" -Status "warn" -Message "No private LAN IPv4 detected." -RepairAction "Verify Windows device is connected to same LAN/Wi-Fi as viewer device."
+}
+
+if (Test-ManagedFirewallRule -RulePort $Port) {
+  Add-Check -Id "network.firewall_private_$Port" -Status "pass" -Message "Managed firewall rule present for inbound TCP $Port."
+}
+else {
+  Add-Check -Id "network.firewall_private_$Port" -Status "warn" -Message "Managed firewall rule not found for inbound TCP $Port." -RepairAction "Run as Administrator: .\\repair-elevated-v0.ps1 -Action OpenFirewall39000 -Port $Port"
 }
 
 $portLines = @(netstat -ano | Select-String ":$Port")

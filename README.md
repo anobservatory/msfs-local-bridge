@@ -9,6 +9,10 @@ This folder contains a Windows console bridge:
 If you are flying at KJFK but the app shows a fixed C172 around KSFO, that usually means a mock sender is running.  
 This bridge is the real SimConnect sender.
 
+First-time setup one-page checklist:
+
+- `FIRST_TIME_CHECKLIST.md` (included in release zip)
+
 ## 0) 6-step quick start (Tester)
 
 1. Extract `msfs-local-bridge-vX.Y.Z-self-contained.zip` on Windows (recommended).
@@ -16,7 +20,7 @@ This bridge is the real SimConnect sender.
 3. Open normal PowerShell (not `Run as administrator`).
 4. Run `.\preflight-v0.ps1` and fix all `FAIL` items.
 5. Run `.\run-bridge.ps1` and keep the terminal open.
-6. On Mac, set `VITE_MSFS_BRIDGE_URL` and choose `Display -> MSFS Local`.
+6. On Mac, open `http://localhost:3000/?msfsBridgeUrl=ws://<WINDOWS_IP>:39000/stream` and choose `Display -> MSFS Local`.
 
 ## 0.0) Current release lock (v0.1.3)
 
@@ -129,7 +133,17 @@ Should return JSON like:
 
 ## 5) Connect Mac web app
 
-In `anobservatory/.env.local` on your Mac:
+Recommended (no `.env.local` edit):
+
+1. Use one URL when opening local panel:
+
+```text
+http://localhost:3000/?msfsBridgeUrl=ws://<WINDOWS_IP>:39000/stream
+```
+
+2. This value is persisted in browser local storage for next runs.
+
+Legacy env-based method:
 
 ```env
 VITE_MSFS_BRIDGE_URL=ws://<WINDOWS_IP>:39000/stream
@@ -234,7 +248,7 @@ Output:
 - `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.1.3-self-contained.zip`
 - `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.1.3-lite.zip`
 
-This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `run-bridge.ps1`, `preflight-v0.ps1`, `diagnostics-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`) needed by testers.
+This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `run-bridge.ps1`, `preflight-v0.ps1`, `diagnostics-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`, `FIRST_TIME_CHECKLIST.md`) needed by testers.
 
 ## 10) Checksum Generation and Verification (Operator)
 
