@@ -558,11 +558,11 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     simConnect.SubscribeToSystemEvent(EventId.SimStop, "SimStop");
   }
 
-  private void RequestOwnshipStream()
+  private void RequestOwnshipStream(string reason)
   {
     lock (_gate)
     {
-      if (_simConnect is null || _requestedOwnshipStream || !_simFlightActive)
+      if (_simConnect is null || _requestedOwnshipStream)
       {
         return;
       }
@@ -579,7 +579,7 @@ internal sealed class SimConnectOwnshipService : BackgroundService
       );
 
       _requestedOwnshipStream = true;
-      _logger.LogInformation("Ownship data stream requested.");
+      _logger.LogInformation("Ownship data stream requested ({Reason}).", reason);
     }
   }
 
@@ -614,7 +614,10 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     _simApplicationName = NormalizeText(data.szApplicationName);
     _simFlightActive = false;
     _logger.LogInformation("SimConnect session opened: {Version}", data.szApplicationName);
-    _logger.LogInformation("Waiting for active flight session (SimStart)...");
+    // SimStart may not re-fire when bridge reconnects mid-flight.
+    // Request stream immediately and infer active flight from first valid ownship frame.
+    RequestOwnshipStream("session-open");
+    _logger.LogInformation("Waiting for first valid ownship telemetry...");
   }
 
   private void OnRecvQuit(SimConnect sender, SIMCONNECT_RECV data)
@@ -635,7 +638,7 @@ internal sealed class SimConnectOwnshipService : BackgroundService
         _simFlightActive = true;
         _logger.LogInformation("SimStart received. Flight session active.");
       }
-      RequestOwnshipStream();
+      RequestOwnshipStream("simstart");
       return;
     }
 
@@ -657,7 +660,7 @@ internal sealed class SimConnectOwnshipService : BackgroundService
 
   private void OnRecvSimobjectData(SimConnect sender, SIMCONNECT_RECV_SIMOBJECT_DATA data)
   {
-    if (!_simFlightActive || data.dwRequestID != (uint)RequestId.Ownship || data.dwData.Length == 0)
+    if (data.dwRequestID != (uint)RequestId.Ownship || data.dwData.Length == 0)
     {
       return;
     }
@@ -669,6 +672,12 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     )
     {
       return;
+    }
+
+    if (!_simFlightActive)
+    {
+      _simFlightActive = true;
+      _logger.LogInformation("Ownship telemetry detected. Flight session active.");
     }
 
     var snapshot = new OwnshipSnapshot(
