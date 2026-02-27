@@ -27,11 +27,11 @@ First-time setup one-page checklist:
    - `http://<WINDOWS_IP>:39000/bootstrap`
 7. Open the printed `Quick open on anobservatory.com` URL and choose `Display -> MSFS Local`.
 
-## 0.0) Current release lock (v0.2.7)
+## 0.0) Current release lock (v0.2.14)
 
-1. Source package: `tools/msfs-local-bridge/dist/msfs-local-bridge-source-v0.2.7.zip`
-2. SHA256 manifest: `tools/msfs-local-bridge/SHA256SUMS-v0.2.7.txt`
-3. Git tag: `v0.2.7`
+1. Source package: `dist/msfs-local-bridge-source-v0.2.14.zip`
+2. SHA256 manifest: `SHA256SUMS-v0.2.14.txt`
+3. Git tag: `v0.2.14`
 
 ## 0.1) Privilege policy (V1 baseline)
 
@@ -68,12 +68,12 @@ Run diagnostics in JSON mode:
 
 For source builds, copy both files into:
 
-`tools/msfs-local-bridge/lib/`
+`lib/`
 
 Final files should be:
 
-`tools/msfs-local-bridge/lib/Microsoft.FlightSimulator.SimConnect.dll`
-`tools/msfs-local-bridge/lib/SimConnect.dll`
+`lib/Microsoft.FlightSimulator.SimConnect.dll`
+`lib/SimConnect.dll`
 
 If you do not know where the DLL is, search in PowerShell:
 
@@ -101,7 +101,7 @@ cd <extracted-zip-folder>
 Source layout (developer):
 
 ```powershell
-cd tools\msfs-local-bridge
+cd <msfs-local-bridge-repo-root>
 .\start.ps1
 ```
 
@@ -269,21 +269,21 @@ Reconnect policy baseline:
 Build portable release zip (recommended self-contained):
 
 ```powershell
-cd tools\msfs-local-bridge
-.\publish-v0.ps1 -Version 0.2.7 -Package self-contained
+cd <msfs-local-bridge-repo-root>
+.\publish-v0.ps1 -Version 0.2.14 -Package self-contained
 ```
 
 Build lite zip (.NET required on tester machine):
 
 ```powershell
-cd tools\msfs-local-bridge
-.\publish-v0.ps1 -Version 0.2.7 -Package lite
+cd <msfs-local-bridge-repo-root>
+.\publish-v0.ps1 -Version 0.2.14 -Package lite
 ```
 
 Output:
 
-- `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.2.7-self-contained.zip`
-- `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.2.7-lite.zip`
+- `dist/msfs-local-bridge-v0.2.14-self-contained.zip`
+- `dist/msfs-local-bridge-v0.2.14-lite.zip`
 
 This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `start.ps1`, `start-msfs-sync.ps1`, `run-bridge.ps1`, `setup-wss-cert-v0.ps1`, `preflight-v0.ps1`, `diagnostics-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`, `FIRST_TIME_CHECKLIST.md`) needed by testers.
 
@@ -292,30 +292,30 @@ This package excludes source `bin/obj` clutter and includes runtime bridge files
 Generate checksums for release artifacts:
 
 ```powershell
-Get-FileHash .\dist\msfs-local-bridge-v0.2.7-self-contained.zip -Algorithm SHA256
-Get-FileHash .\dist\msfs-local-bridge-v0.2.7-lite.zip -Algorithm SHA256
-Get-FileHash .\dist\msfs-local-bridge-source-v0.2.7.zip -Algorithm SHA256
+Get-FileHash .\dist\msfs-local-bridge-v0.2.14-self-contained.zip -Algorithm SHA256
+Get-FileHash .\dist\msfs-local-bridge-v0.2.14-lite.zip -Algorithm SHA256
+Get-FileHash .\dist\msfs-local-bridge-source-v0.2.14.zip -Algorithm SHA256
 ```
 
 Canonical manifest file:
 
-- `tools/msfs-local-bridge/SHA256SUMS-v0.2.7.txt`
+- `SHA256SUMS-v0.2.14.txt`
 
 ## 11) Version Tagging Rule (Release)
 
 Use a semantic git tag and matching package version:
 
-1. Git tag format: `vMAJOR.MINOR.PATCH` (example: `v0.2.7`)
+1. Git tag format: `vMAJOR.MINOR.PATCH` (example: `v0.2.14`)
 2. Publish arguments:
-   - `.\publish-v0.ps1 -Version 0.2.7 -Package self-contained`
-   - `.\publish-v0.ps1 -Version 0.2.7 -Package lite`
+   - `.\publish-v0.ps1 -Version 0.2.14 -Package self-contained`
+   - `.\publish-v0.ps1 -Version 0.2.14 -Package lite`
 3. Output packages:
-   - `msfs-local-bridge-v0.2.7-self-contained.zip`
-   - `msfs-local-bridge-v0.2.7-lite.zip`
+   - `msfs-local-bridge-v0.2.14-self-contained.zip`
+   - `msfs-local-bridge-v0.2.14-lite.zip`
 
 Release command example:
 
 ```bash
-git tag v0.2.7
-git push origin v0.2.7
+git tag v0.2.14
+git push origin v0.2.14
 ```

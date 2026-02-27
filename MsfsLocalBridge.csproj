@@ -16,10 +16,10 @@
   <Target Name="EnsureSimConnectAssemblies" BeforeTargets="ResolveReferences">
     <Error
       Condition="!Exists('lib\Microsoft.FlightSimulator.SimConnect.dll')"
-      Text="Missing SimConnect managed assembly. Copy Microsoft.FlightSimulator.SimConnect.dll into tools/msfs-local-bridge/lib/ before building." />
+      Text="Missing SimConnect managed assembly. Copy Microsoft.FlightSimulator.SimConnect.dll into lib/ before building." />
     <Error
       Condition="!Exists('lib\SimConnect.dll')"
-      Text="Missing native SimConnect runtime. Copy SimConnect.dll into tools/msfs-local-bridge/lib/ before building." />
+      Text="Missing native SimConnect runtime. Copy SimConnect.dll into lib/ before building." />
   </Target>
 
   <ItemGroup>
