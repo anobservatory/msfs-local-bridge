@@ -388,6 +388,7 @@ $safeCertBase = Get-SafeCertBaseName -Domain $LocalDomain
 $certRoot = Resolve-PathUnderRoot -Root $PSScriptRoot -PathValue $CertDir
 $certPath = Join-Path $certRoot "$safeCertBase.pem"
 $keyPath = Join-Path $certRoot "$safeCertBase-key.pem"
+$rootCaPath = Join-Path $certRoot "rootCA.pem"
 
 if (Test-Path $certPath) {
   Write-Check -Status PASS -Message "WSS certificate found: $certPath"
@@ -401,6 +402,13 @@ if (Test-Path $keyPath) {
 }
 else {
   Write-Check -Status WARN -Message "WSS key missing: $keyPath"
+}
+
+if (Test-Path $rootCaPath) {
+  Write-Check -Status PASS -Message "Root CA export found: $rootCaPath"
+}
+else {
+  Write-Check -Status WARN -Message "Root CA export missing: $rootCaPath (listener bootstrap scripts may fail)"
 }
 
 $mkcertPath = Find-MkcertPath

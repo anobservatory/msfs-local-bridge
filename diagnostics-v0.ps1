@@ -341,6 +341,7 @@ $safeCertBase = Get-SafeCertBaseName -Domain $LocalDomain
 $certRoot = Resolve-PathUnderRoot -Root $projectRoot -PathValue $CertDir
 $certPath = Join-Path $certRoot "$safeCertBase.pem"
 $keyPath = Join-Path $certRoot "$safeCertBase-key.pem"
+$rootCaPath = Join-Path $certRoot "rootCA.pem"
 
 if (Test-Path $certPath) {
   Add-Check -Id "network.wss_cert" -Status "pass" -Message "WSS certificate found: $certPath"
@@ -354,6 +355,13 @@ if (Test-Path $keyPath) {
 }
 else {
   Add-Check -Id "network.wss_key" -Status "warn" -Message "WSS key missing: $keyPath" -RepairAction "Run: .\\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`""
+}
+
+if (Test-Path $rootCaPath) {
+  Add-Check -Id "network.root_ca" -Status "pass" -Message "Root CA export found: $rootCaPath"
+}
+else {
+  Add-Check -Id "network.root_ca" -Status "warn" -Message "Root CA export missing: $rootCaPath" -RepairAction "Run: .\\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`""
 }
 
 $mkcertPath = Find-MkcertPath

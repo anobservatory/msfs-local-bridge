@@ -107,7 +107,13 @@ New-Item -ItemType Directory -Path $certRoot -Force | Out-Null
 
 $certPath = Join-Path $certRoot "$safeBase.pem"
 $keyPath = Join-Path $certRoot "$safeBase-key.pem"
+$rootCaExportPath = Join-Path $certRoot "rootCA.pem"
+$lanIps = Get-PrivateLanIPv4
 $subjects = @($LocalDomain, "localhost", "127.0.0.1", "::1")
+if ($lanIps.Count -gt 0) {
+  $subjects += $lanIps
+}
+$subjects = @($subjects | Select-Object -Unique)
 
 Write-Host "MSFS Local Bridge WSS Certificate Setup" -ForegroundColor Cyan
 Write-Host "  domain: $LocalDomain"
@@ -130,15 +136,33 @@ if ($LASTEXITCODE -ne 0) {
   throw "mkcert certificate generation failed with exit code $LASTEXITCODE"
 }
 
+try {
+  $caRoot = (& $mkcertPath -CAROOT).Trim()
+  if ($caRoot) {
+    $rootCaSourcePath = Join-Path $caRoot "rootCA.pem"
+    if (Test-Path $rootCaSourcePath) {
+      Copy-Item -Path $rootCaSourcePath -Destination $rootCaExportPath -Force
+    }
+  }
+}
+catch {
+  Write-Host "[WARN] Could not export root CA automatically: $($_.Exception.Message)" -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "[PASS] WSS certificate generated." -ForegroundColor Green
 Write-Host "Subjects: $($subjects -join ', ')"
+if (Test-Path $rootCaExportPath) {
+  Write-Host "Root CA: $rootCaExportPath"
+}
 
-$lanIps = Get-PrivateLanIPv4
 if ($lanIps.Count -gt 0) {
   Write-Host ""
-  Write-Host "Next step: map this domain on listener devices:" -ForegroundColor Yellow
-  Write-Host "  $LocalDomain -> $($lanIps[0])"
+  Write-Host "Recommended listener connect target (no hosts mapping required when cert includes LAN IP SAN):" -ForegroundColor Yellow
+  Write-Host "  wss://$($lanIps[0]):39002/stream"
+  Write-Host ""
+  Write-Host "Fallback target (requires domain mapping):" -ForegroundColor Yellow
+  Write-Host "  wss://$LocalDomain`:39002/stream"
 }
 
 Write-Host ""

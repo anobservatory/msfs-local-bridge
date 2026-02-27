@@ -128,8 +128,11 @@ $safeCertBase = Get-SafeCertBaseName -Domain $LocalDomain
 $certRoot = Resolve-PathUnderRoot -Root $PSScriptRoot -PathValue $CertDir
 $certPath = Join-Path $certRoot "$safeCertBase.pem"
 $keyPath = Join-Path $certRoot "$safeCertBase-key.pem"
+$rootCaPath = Join-Path $certRoot "rootCA.pem"
 $wssRequested = -not $DisableWss
 $wssReady = $false
+$lanIps = Get-PrivateLanIPv4
+$bootstrapHostIp = if ($lanIps.Count -gt 0) { $lanIps[0] } else { "" }
 
 if ($wssRequested) {
   if ((Test-Path $certPath) -and (Test-Path $keyPath)) {
@@ -152,6 +155,10 @@ $env:MSFS_BRIDGE_WSS_PORT = "$WssPort"
 $env:MSFS_BRIDGE_PUBLIC_WSS_HOST = "$LocalDomain"
 $env:MSFS_BRIDGE_TLS_CERT_PATH = "$certPath"
 $env:MSFS_BRIDGE_TLS_KEY_PATH = "$keyPath"
+$env:MSFS_BRIDGE_BOOTSTRAP_ENABLED = "true"
+$env:MSFS_BRIDGE_BOOTSTRAP_PATH = "/bootstrap"
+$env:MSFS_BRIDGE_BOOTSTRAP_HOST_IP = "$bootstrapHostIp"
+$env:MSFS_BRIDGE_BOOTSTRAP_CA_PATH = "$rootCaPath"
 
 $isAdmin = Test-IsAdministrator
 if ($isAdmin) {
@@ -171,7 +178,6 @@ if ($wssReady) {
 }
 
 if (-not $SkipLanHints) {
-  $lanIps = Get-PrivateLanIPv4
   if ($lanIps.Count -gt 0) {
     Write-Host "  LAN URL candidates:"
     foreach ($ip in $lanIps) {
@@ -188,6 +194,12 @@ if (-not $SkipLanHints) {
       $encodedSecureUrl = [System.Uri]::EscapeDataString($secureUrl)
       Write-Host "  Quick open on anobservatory.com:"
       Write-Host "    https://anobservatory.com/?msfsBridgeUrl=$encodedSecureUrl"
+      $bootstrapUrl = "http://$bootstrapHostIp`:$Port/bootstrap"
+      Write-Host "  Listener onboarding page:"
+      Write-Host "    $bootstrapUrl"
+      Write-Host "  Listener bootstrap scripts:"
+      Write-Host "    Mac:     curl -fsSL $bootstrapUrl/listener/mac.sh | bash"
+      Write-Host "    Windows: powershell -ExecutionPolicy Bypass -Command `"iwr '$bootstrapUrl/listener/windows.ps1' -UseBasicParsing | iex`""
     }
   }
   else {

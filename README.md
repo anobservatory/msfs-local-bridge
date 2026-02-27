@@ -5,6 +5,7 @@ This folder contains a Windows console bridge:
 - `MSFS SimConnect` -> `WebSocket stream`
 - Stream endpoint: `ws://<windows-ip>:39000/stream`
 - Secure stream endpoint (when cert is configured): `wss://ao.home.arpa:39002/stream`
+- Listener bootstrap endpoint: `http://<windows-ip>:39000/bootstrap`
 - Payload shape matches `src/services/msfs/msfsClient.ts`
 
 If you are flying at KJFK but the app shows a fixed C172 around KSFO, that usually means a mock sender is running.  
@@ -19,9 +20,11 @@ First-time setup one-page checklist:
 1. Extract `msfs-local-bridge-vX.Y.Z-self-contained.zip` on Windows (recommended).
 2. Verify both SimConnect DLL files exist in package root and `lib/`.
 3. Open normal PowerShell (not `Run as administrator`).
-4. Run `.\start-msfs-sync.ps1` (runs preflight, then starts bridge).
+4. Run `.\start-msfs-sync.ps1 -LocalDomain ao.home.arpa -RequireWss` (runs preflight, cert setup, then starts bridge).
 5. Keep the terminal open while flying.
-6. Open `https://anobservatory.com/?msfsBridgeUrl=wss://ao.home.arpa:39002/stream` and choose `Display -> MSFS Local`.
+6. On listener device, run one-time bootstrap from host output:
+   - `http://<WINDOWS_IP>:39000/bootstrap`
+7. Open `https://anobservatory.com/?msfsBridgeUrl=wss://ao.home.arpa:39002/stream` and choose `Display -> MSFS Local`.
 
 ## 0.0) Current release lock (v0.2.7)
 
@@ -129,18 +132,28 @@ Should return JSON like:
 {"name":"msfs-local-bridge","status":"ok","streamPath":"/stream","sampleIntervalMs":200}
 ```
 
-## 5) Connect Mac web app
+## 5) Connect listener device (Mac/Windows)
 
 Recommended WSS-first flow (no `.env.local` edit):
 
-1. Use one URL when opening local panel:
+1. Open host onboarding page:
+
+```text
+http://<WINDOWS_IP>:39000/bootstrap
+```
+
+2. Run one-time listener setup from that page:
+   - Mac:
+     `curl -fsSL http://<WINDOWS_IP>:39000/bootstrap/listener/mac.sh | bash`
+   - Windows:
+     `powershell -ExecutionPolicy Bypass -Command "iwr 'http://<WINDOWS_IP>:39000/bootstrap/listener/windows.ps1' -UseBasicParsing | iex"`
+3. Use one URL when opening AO panel:
 
 ```text
 https://anobservatory.com/?msfsBridgeUrl=wss://ao.home.arpa:39002/stream
 ```
 
-2. This value is persisted in browser local storage for next runs.
-3. One-time setup on listener device: trust local cert and map `ao.home.arpa -> <WINDOWS_IP>`.
+4. This value is persisted in browser local storage for next runs.
 
 Fallback WS/local-dev flow:
 
