@@ -13,7 +13,7 @@ Scope: same-network setup (`MSFS Windows -> Bridge -> anobservatory.com`).
 
 3. Keep terminal open while flying.
 4. Confirm output shows:
-   - secure stream: `wss://ao.home.arpa:39002/stream`
+   - secure stream: `wss://<WINDOWS_IP>:39002/stream`
    - listener onboarding page: `http://<WINDOWS_IP>:39000/bootstrap`
 
 ## 2) On listener device (Mac/Windows, one-time bootstrap)

@@ -133,6 +133,7 @@ $wssRequested = -not $DisableWss
 $wssReady = $false
 $lanIps = Get-PrivateLanIPv4
 $bootstrapHostIp = if ($lanIps.Count -gt 0) { $lanIps[0] } else { "" }
+$wssConnectHost = if (-not [string]::IsNullOrWhiteSpace($bootstrapHostIp)) { $bootstrapHostIp } else { $LocalDomain }
 
 if ($wssRequested) {
   if ((Test-Path $certPath) -and (Test-Path $keyPath)) {
@@ -152,7 +153,7 @@ if ($wssRequested) {
 $env:MSFS_BRIDGE_WSS_ENABLED = if ($wssReady) { "true" } else { "false" }
 $env:MSFS_BRIDGE_WSS_BIND = "$BindHost"
 $env:MSFS_BRIDGE_WSS_PORT = "$WssPort"
-$env:MSFS_BRIDGE_PUBLIC_WSS_HOST = "$LocalDomain"
+$env:MSFS_BRIDGE_PUBLIC_WSS_HOST = "$wssConnectHost"
 $env:MSFS_BRIDGE_TLS_CERT_PATH = "$certPath"
 $env:MSFS_BRIDGE_TLS_KEY_PATH = "$keyPath"
 $env:MSFS_BRIDGE_BOOTSTRAP_ENABLED = "true"
@@ -174,7 +175,10 @@ Write-Host "Starting MSFS Local Bridge..."
 Write-Host "  bind:   ws://$BindHost`:$Port$StreamPath"
 Write-Host "  local:  ws://127.0.0.1`:$Port$StreamPath"
 if ($wssReady) {
-  Write-Host "  secure: wss://$LocalDomain`:$WssPort$StreamPath"
+  Write-Host "  secure: wss://$wssConnectHost`:$WssPort$StreamPath"
+  if ($wssConnectHost -ne $LocalDomain) {
+    Write-Host "  fallback secure (hosts mapping required): wss://$LocalDomain`:$WssPort$StreamPath"
+  }
 }
 
 if (-not $SkipLanHints) {
@@ -190,7 +194,7 @@ if (-not $SkipLanHints) {
     Write-Host "  Quick open from Mac browser:"
     Write-Host "    http://localhost:3000/?msfsBridgeUrl=$encodedPreferredUrl"
     if ($wssReady) {
-      $secureUrl = "wss://$LocalDomain`:$WssPort$StreamPath"
+      $secureUrl = "wss://$wssConnectHost`:$WssPort$StreamPath"
       $encodedSecureUrl = [System.Uri]::EscapeDataString($secureUrl)
       Write-Host "  Quick open on anobservatory.com:"
       Write-Host "    https://anobservatory.com/?msfsBridgeUrl=$encodedSecureUrl"

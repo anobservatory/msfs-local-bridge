@@ -4,7 +4,8 @@ This folder contains a Windows console bridge:
 
 - `MSFS SimConnect` -> `WebSocket stream`
 - Stream endpoint: `ws://<windows-ip>:39000/stream`
-- Secure stream endpoint (when cert is configured): `wss://ao.home.arpa:39002/stream`
+- Secure stream endpoint (default when cert is configured): `wss://<windows-ip>:39002/stream`
+- Domain fallback endpoint: `wss://ao.home.arpa:39002/stream` (requires hosts/DNS mapping)
 - Listener bootstrap endpoint: `http://<windows-ip>:39000/bootstrap`
 - Payload shape matches `src/services/msfs/msfsClient.ts`
 
@@ -24,7 +25,7 @@ First-time setup one-page checklist:
 5. Keep the terminal open while flying.
 6. On listener device, run one-time bootstrap from host output:
    - `http://<WINDOWS_IP>:39000/bootstrap`
-7. Open `https://anobservatory.com/?msfsBridgeUrl=wss://ao.home.arpa:39002/stream` and choose `Display -> MSFS Local`.
+7. Open the printed `Quick open on anobservatory.com` URL and choose `Display -> MSFS Local`.
 
 ## 0.0) Current release lock (v0.2.7)
 
@@ -150,7 +151,7 @@ http://<WINDOWS_IP>:39000/bootstrap
 3. Use one URL when opening AO panel:
 
 ```text
-https://anobservatory.com/?msfsBridgeUrl=wss://ao.home.arpa:39002/stream
+https://anobservatory.com/?msfsBridgeUrl=wss://<WINDOWS_IP>:39002/stream
 ```
 
 4. This value is persisted in browser local storage for next runs.
@@ -231,7 +232,7 @@ Quick diagnostics helper:
 12. WSS URL fails with cert warning or `ERR_CERT`:
    - run `.\setup-wss-cert-v0.ps1 -LocalDomain ao.home.arpa`
    - trust generated local CA/cert on listener device
-   - verify hosts/DNS maps `ao.home.arpa` to Windows bridge IP
+   - if using domain fallback URL, verify hosts/DNS maps `ao.home.arpa` to Windows bridge IP
 
 ## 8) Optional runtime env vars
 
@@ -242,7 +243,7 @@ Defaults are safe for first run.
 - `MSFS_BRIDGE_PATH` default: `/stream`
 - `MSFS_BRIDGE_WSS_ENABLED` default: `false` (enabled automatically by `run-bridge.ps1` when cert exists)
 - `MSFS_BRIDGE_WSS_PORT` default: `39002`
-- `MSFS_BRIDGE_PUBLIC_WSS_HOST` default: `ao.home.arpa`
+- `MSFS_BRIDGE_PUBLIC_WSS_HOST` default in run script: first detected LAN IP (fallback: `ao.home.arpa`)
 - `MSFS_BRIDGE_TLS_CERT_PATH` default: `certs/ao.home.arpa.pem`
 - `MSFS_BRIDGE_TLS_KEY_PATH` default: `certs/ao.home.arpa-key.pem`
 - `MSFS_BRIDGE_SAMPLE_MS` default: `200`
