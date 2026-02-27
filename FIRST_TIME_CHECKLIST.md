@@ -8,7 +8,7 @@ Scope: same-network setup (`MSFS Windows -> Bridge -> anobservatory.com`).
 2. Run:
 
 ```powershell
-.\start-msfs-sync.ps1 -LocalDomain ao.home.arpa -RequireWss
+.\start.ps1
 ```
 
 3. Keep terminal open while flying.
@@ -46,5 +46,5 @@ Scope: same-network setup (`MSFS Windows -> Bridge -> anobservatory.com`).
 2. Restart bridge:
 
 ```powershell
-.\start-msfs-sync.ps1 -LocalDomain ao.home.arpa -RequireWss
+.\start.ps1
 ```

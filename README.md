@@ -21,7 +21,7 @@ First-time setup one-page checklist:
 1. Extract `msfs-local-bridge-vX.Y.Z-self-contained.zip` on Windows (recommended).
 2. Verify both SimConnect DLL files exist in package root and `lib/`.
 3. Open normal PowerShell (not `Run as administrator`).
-4. Run `.\start-msfs-sync.ps1 -LocalDomain ao.home.arpa -RequireWss` (runs preflight, cert setup, then starts bridge).
+4. Run `.\start.ps1` (one-click default: runs preflight, cert setup, then starts bridge in WSS mode).
 5. Keep the terminal open while flying.
 6. On listener device, run one-time bootstrap from host output:
    - `http://<WINDOWS_IP>:39000/bootstrap`
@@ -95,14 +95,20 @@ Release zip (tester):
 
 ```powershell
 cd <extracted-zip-folder>
-.\start-msfs-sync.ps1
+.\start.ps1
 ```
 
 Source layout (developer):
 
 ```powershell
 cd tools\msfs-local-bridge
-.\start-msfs-sync.ps1
+.\start.ps1
+```
+
+Advanced mode (custom flags):
+
+```powershell
+.\start-msfs-sync.ps1 -LocalDomain ao.home.arpa -RequireWss
 ```
 
 If script execution is blocked once, run:
@@ -111,7 +117,7 @@ If script execution is blocked once, run:
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-Then run `.\start-msfs-sync.ps1` again.
+Then run `.\start.ps1` again.
 
 ## 4) Confirm it is live
 
@@ -279,7 +285,7 @@ Output:
 - `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.2.7-self-contained.zip`
 - `tools/msfs-local-bridge/dist/msfs-local-bridge-v0.2.7-lite.zip`
 
-This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `start-msfs-sync.ps1`, `run-bridge.ps1`, `setup-wss-cert-v0.ps1`, `preflight-v0.ps1`, `diagnostics-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`, `FIRST_TIME_CHECKLIST.md`) needed by testers.
+This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `start.ps1`, `start-msfs-sync.ps1`, `run-bridge.ps1`, `setup-wss-cert-v0.ps1`, `preflight-v0.ps1`, `diagnostics-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`, `FIRST_TIME_CHECKLIST.md`) needed by testers.
 
 ## 10) Checksum Generation and Verification (Operator)
 

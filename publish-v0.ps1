@@ -59,6 +59,7 @@ New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
 Copy-Item (Join-Path $publishDir "*") $packageRoot -Recurse -Force
 Copy-Item (Join-Path $projectRoot "README.md") (Join-Path $packageRoot "README.md") -Force
 Copy-Item (Join-Path $projectRoot "FIRST_TIME_CHECKLIST.md") (Join-Path $packageRoot "FIRST_TIME_CHECKLIST.md") -Force
+Copy-Item (Join-Path $projectRoot "start.ps1") (Join-Path $packageRoot "start.ps1") -Force
 Copy-Item (Join-Path $projectRoot "start-msfs-sync.ps1") (Join-Path $packageRoot "start-msfs-sync.ps1") -Force
 Copy-Item (Join-Path $projectRoot "run-bridge.ps1") (Join-Path $packageRoot "run-bridge.ps1") -Force
 Copy-Item (Join-Path $projectRoot "setup-wss-cert-v0.ps1") (Join-Path $packageRoot "setup-wss-cert-v0.ps1") -Force
