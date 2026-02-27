@@ -81,28 +81,56 @@ function Test-ManagedFirewallRule {
 }
 
 function Get-PrivateLanIPv4 {
-  $candidates = New-Object System.Collections.Generic.List[string]
+  $ordered = New-Object System.Collections.Generic.List[string]
+  $seen = @{}
+
+  function Add-PrivateCandidate {
+    param([string]$Ip)
+    if ([string]::IsNullOrWhiteSpace($Ip)) { return }
+    if ($Ip -eq "127.0.0.1" -or $Ip -like "169.254.*") { return }
+    if ($Ip -notmatch '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)') { return }
+    if (-not $seen.ContainsKey($Ip)) {
+      $seen[$Ip] = $true
+      $ordered.Add($Ip) | Out-Null
+    }
+  }
+
+  try {
+    $preferred = @(Get-NetIPConfiguration -ErrorAction Stop |
+      Where-Object {
+        $_.IPv4Address -and
+        $_.IPv4DefaultGateway -and
+        $_.NetAdapter -and
+        $_.NetAdapter.Status -eq "Up"
+      } |
+      ForEach-Object { @($_.IPv4Address) } |
+      ForEach-Object { $_.IPAddress })
+
+    foreach ($ip in $preferred) {
+      Add-PrivateCandidate -Ip $ip
+    }
+  }
+  catch {
+    # Fallback probe below.
+  }
+
   try {
     $netIps = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
       Where-Object {
         $_.IPAddress -and
-        $_.IPAddress -ne "127.0.0.1" -and
-        $_.IPAddress -notlike "169.254.*" -and
         $_.AddressState -eq "Preferred"
       } |
       Select-Object -ExpandProperty IPAddress -Unique)
 
     foreach ($ip in $netIps) {
-      if ($ip -match '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)') {
-        $candidates.Add($ip) | Out-Null
-      }
+      Add-PrivateCandidate -Ip $ip
     }
   }
   catch {
     # Fallback below if Get-NetIPAddress is unavailable.
   }
 
-  if ($candidates.Count -eq 0) {
+  if ($ordered.Count -eq 0) {
     try {
       $hostName = [System.Net.Dns]::GetHostName()
       $dnsIps = @([System.Net.Dns]::GetHostAddresses($hostName) |
@@ -112,13 +140,7 @@ function Get-PrivateLanIPv4 {
         ForEach-Object { $_.IPAddressToString })
 
       foreach ($ip in $dnsIps) {
-        if (
-          $ip -ne "127.0.0.1" -and
-          $ip -notlike "169.254.*" -and
-          $ip -match '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)'
-        ) {
-          $candidates.Add($ip) | Out-Null
-        }
+        Add-PrivateCandidate -Ip $ip
       }
     }
     catch {
@@ -126,7 +148,7 @@ function Get-PrivateLanIPv4 {
     }
   }
 
-  return @($candidates | Select-Object -Unique)
+  return @($ordered)
 }
 
 function Resolve-PathUnderRoot {

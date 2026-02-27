@@ -83,15 +83,31 @@ if (bridgeOptions.BootstrapEnabled)
     ? $"https://anobservatory.com/?msfsBridgeUrl={Uri.EscapeDataString(wssClientUrl)}"
     : string.Empty;
 
-  app.MapGet(bootstrapBasePath, () =>
+  app.MapGet(bootstrapBasePath, (ILoggerFactory loggerFactory) =>
   {
-    var html = BuildBootstrapHtml(
-      bootstrapBaseUrl: bootstrapBaseUrl,
-      wssClientUrl: wssClientUrl,
-      aoConnectUrl: aoConnectUrl,
-      wssEnabled: bridgeOptions.WssEnabled
-    );
-    return Results.Content(html, "text/html; charset=utf-8");
+    try
+    {
+      var html = BuildBootstrapHtml(
+        bootstrapBaseUrl: bootstrapBaseUrl,
+        wssClientUrl: wssClientUrl,
+        aoConnectUrl: aoConnectUrl,
+        wssEnabled: bridgeOptions.WssEnabled
+      );
+      return Results.Content(html, "text/html; charset=utf-8");
+    }
+    catch (Exception ex)
+    {
+      var logger = loggerFactory.CreateLogger("MsfsLocalBridge.Bootstrap");
+      logger.LogError(ex, "Bootstrap HTML render failed.");
+
+      var fallback = BuildBootstrapFallbackText(
+        bootstrapBaseUrl: bootstrapBaseUrl,
+        wssClientUrl: wssClientUrl,
+        aoConnectUrl: aoConnectUrl,
+        wssEnabled: bridgeOptions.WssEnabled
+      );
+      return Results.Text(fallback, "text/plain; charset=utf-8");
+    }
   });
 
   app.MapGet($"{bootstrapBasePath}/", () => Results.Redirect(bootstrapBasePath));
@@ -457,6 +473,30 @@ static string BuildBootstrapHtml(string bootstrapBaseUrl, string wssClientUrl, s
   html.AppendLine("</body>");
   html.AppendLine("</html>");
   return html.ToString();
+}
+
+static string BuildBootstrapFallbackText(string bootstrapBaseUrl, string wssClientUrl, string aoConnectUrl, bool wssEnabled)
+{
+  var sb = new StringBuilder();
+  sb.AppendLine("AO MSFS Listener Bootstrap");
+  sb.AppendLine();
+  sb.AppendLine($"Bootstrap base: {bootstrapBaseUrl}");
+  sb.AppendLine($"Manifest: {bootstrapBaseUrl}/manifest.json");
+  sb.AppendLine($"Root CA: {bootstrapBaseUrl}/ca/rootCA.pem");
+  sb.AppendLine($"Mac script: {bootstrapBaseUrl}/listener/mac.sh");
+  sb.AppendLine($"Windows script: {bootstrapBaseUrl}/listener/windows.ps1");
+  sb.AppendLine();
+  if (wssEnabled)
+  {
+    sb.AppendLine($"WSS bridge URL: {wssClientUrl}");
+    sb.AppendLine($"AO connect URL: {aoConnectUrl}");
+  }
+  else
+  {
+    sb.AppendLine("WSS is disabled. Configure cert + WSS first.");
+  }
+
+  return sb.ToString();
 }
 
 static string BuildMacListenerScript(string bootstrapBaseUrl, string wssPublicHost, string bootstrapHostIp)
