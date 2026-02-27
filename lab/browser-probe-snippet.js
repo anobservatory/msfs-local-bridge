@@ -1,5 +1,4 @@
 /* Paste this in browser console (e.g., https://anobservatory.com). */
-/* eslint-disable no-console */
 async function runAoLnaProbe(wsUrl, timeoutMs = 10000) {
   const startedAt = Date.now();
   const result = {
@@ -74,6 +73,8 @@ async function runAoLnaProbe(wsUrl, timeoutMs = 10000) {
     };
   });
 }
+
+window.runAoLnaProbe = runAoLnaProbe;
 
 console.log('Ready: runAoLnaProbe("ws://<LAN_IP>:39000/stream")');
 console.log('Ready: runAoLnaProbe("wss://localhost:39002/stream")');
