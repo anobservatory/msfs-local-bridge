@@ -1,1 +1,0 @@
-3ccb8f6bb630f38aa2cf84152e9e5e75c90bd8db5c5167819a486a63e081f0a3  dist/msfs-local-bridge-source-v0.2.7.zip
