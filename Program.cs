@@ -248,6 +248,7 @@ app.Map(bridgeOptions.StreamPath, async (
             altBaroFt = snapshot.AltBaroFt,
             altGeomFt = snapshot.AltGeomFt,
             gsKt = snapshot.GsKt,
+            headingDegTrue = snapshot.HeadingDegTrue,
             trackDegTrue = snapshot.TrackDegTrue,
             vsFpm = snapshot.VsFpm,
             onGround = snapshot.OnGround,
@@ -832,6 +833,7 @@ internal readonly record struct OwnshipSnapshot(
   double AltBaroFt,
   double AltGeomFt,
   double GsKt,
+  double HeadingDegTrue,
   double TrackDegTrue,
   double VsFpm,
   bool OnGround,
@@ -999,6 +1001,7 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "PLANE ALTITUDE", "feet", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "GROUND VELOCITY", "knots", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "PLANE HEADING DEGREES TRUE", "degrees", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "GPS GROUND TRUE TRACK", "degrees", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "VERTICAL SPEED", "feet per minute", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "SIM ON GROUND", "bool", SIMCONNECT_DATATYPE.INT32, 0f, SimConnect.SIMCONNECT_UNUSED);
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "TITLE", null, SIMCONNECT_DATATYPE.STRING256, 0f, SimConnect.SIMCONNECT_UNUSED);
@@ -1149,7 +1152,8 @@ internal sealed class SimConnectOwnshipService : BackgroundService
       AltBaroFt: ownship.IndicatedAltitudeFt,
       AltGeomFt: ownship.PlaneAltitudeFt,
       GsKt: Math.Max(0, ownship.GroundVelocityKt),
-      TrackDegTrue: NormalizeHeading(ownship.TrueHeadingDeg),
+      HeadingDegTrue: NormalizeHeading(ownship.TrueHeadingDeg),
+      TrackDegTrue: NormalizeHeading(ownship.GroundTrackDeg),
       VsFpm: ownship.VerticalSpeedFpm,
       OnGround: ownship.SimOnGround != 0,
       TimestampMs: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
@@ -1357,6 +1361,7 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     public double PlaneAltitudeFt;
     public double GroundVelocityKt;
     public double TrueHeadingDeg;
+    public double GroundTrackDeg;
     public double VerticalSpeedFpm;
     public int SimOnGround;
 
