@@ -287,24 +287,6 @@ Output:
 
 This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `start.ps1`, `start-msfs-sync.ps1`, `run-bridge.ps1`, `setup-wss-cert-v0.ps1`, `preflight-v0.ps1`, `diagnostics-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`, `FIRST_TIME_CHECKLIST.md`) needed by testers.
 
-Build WinUI Assistant package (self-contained by default):
-
-```powershell
-cd <msfs-local-bridge-repo-root>
-.\publish-winui-v0.ps1 -Version 0.1.0 -SelfContained $true
-```
-
-WinUI output:
-
-- `dist/msfs-local-bridge-assistant-winui-v0.1.0-self-contained.zip`
-- `dist/SHA256SUMS-winui-v0.1.0.txt`
-
-GitHub Actions workflow for WinUI packaging:
-
-- `.github/workflows/winui-package.yml`
-- manual run: `workflow_dispatch` with version input
-- tag trigger: `winui-vX.Y.Z`
-
 ## 10) Checksum Generation and Verification (Operator)
 
 Generate checksums for release artifacts:
