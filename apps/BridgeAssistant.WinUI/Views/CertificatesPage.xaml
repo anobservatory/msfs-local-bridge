@@ -6,22 +6,76 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <StackPanel Spacing="14" Padding="24">
-        <TextBlock Text="Certificate Manager" FontSize="28" FontWeight="SemiBold" />
+    <ScrollViewer>
+        <StackPanel Spacing="14" Padding="24">
+            <TextBlock Text="Certificate Manager" FontSize="28" FontWeight="SemiBold" />
 
-        <Border BorderBrush="#3A3A3A" BorderThickness="1" CornerRadius="6" Padding="12">
-            <StackPanel Spacing="8">
-                <TextBlock Text="Prerequisite" FontWeight="SemiBold" />
-                <TextBlock x:Name="MkcertStatusText" Text="mkcert check: run diagnostics" Foreground="#C0C0C0" />
+            <TextBlock Text="Prerequisites" FontSize="14" FontWeight="SemiBold" Opacity="0.8" />
+            <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="12">
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBlock Text="mkcert on PATH" FontWeight="SemiBold" />
+                        <TextBlock x:Name="MkcertStatusText" Grid.Column="1" Text="Check needed" Opacity="0.8" />
+                    </Grid>
+                    <TextBlock
+                        Text="If missing, install mkcert first. Certificate generation cannot complete until this prerequisite is ready."
+                        TextWrapping="Wrap"
+                        Opacity="0.75" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Check Now" Click="OnRefreshDiagnosticsClick" />
+                        <Button Content="Show mkcert Check" Click="OnShowMkcertCheckClick" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="Local Domain" FontSize="14" FontWeight="SemiBold" Opacity="0.8" />
+            <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="12">
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="120,*,Auto" ColumnSpacing="8">
+                        <TextBlock Text="Bridge domain" VerticalAlignment="Center" />
+                        <TextBox x:Name="DomainBox" Grid.Column="1" />
+                        <Button Grid.Column="2" Content="Apply" Click="OnApplyDomainClick" />
+                    </Grid>
+                    <TextBlock Text="Used by setup-wss-cert-v0.ps1 -LocalDomain ..." Opacity="0.75" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="Certificate Status" FontSize="14" FontWeight="SemiBold" Opacity="0.8" />
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="12">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Server Certificate" FontWeight="SemiBold" />
+                        <TextBlock x:Name="CertStatusText" Text="Missing" Opacity="0.8" />
+                        <TextBlock x:Name="CertPathText" Text="certs/ao.home.arpa.pem" TextWrapping="Wrap" Opacity="0.7" />
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="12">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Private Key" FontWeight="SemiBold" />
+                        <TextBlock x:Name="KeyStatusText" Text="Missing" Opacity="0.8" />
+                        <TextBlock x:Name="KeyPathText" Text="certs/ao.home.arpa-key.pem" TextWrapping="Wrap" Opacity="0.7" />
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="2" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="12">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Root CA Trust" FontWeight="SemiBold" />
+                        <TextBlock x:Name="RootStatusText" Text="Not verified" Opacity="0.8" />
+                        <TextBlock Text="LocalMachine\\Root" TextWrapping="Wrap" Opacity="0.7" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button x:Name="GenerateButton" Content="Generate + Install" Click="OnGenerateClick" />
+                <Button x:Name="VerifyButton" Content="Verify via Diagnostics" Click="OnVerifyClick" />
+                <Button x:Name="RefreshButton" Content="Re-run Diagnostics" Click="OnRefreshDiagnosticsClick" />
+                <Button Content="Copy Cert Command" Click="OnCopyCommandClick" />
             </StackPanel>
-        </Border>
 
-        <StackPanel Orientation="Horizontal" Spacing="8">
-            <Button x:Name="GenerateButton" Content="Generate + Install" Click="OnGenerateClick" />
-            <Button x:Name="VerifyButton" Content="Verify Trust" Click="OnVerifyClick" />
-            <Button x:Name="RefreshButton" Content="Re-run Diagnostics" Click="OnRefreshDiagnosticsClick" />
+            <TextBlock Text="PowerShell Command" FontSize="14" FontWeight="SemiBold" Opacity="0.8" />
+            <TextBox x:Name="CertCommandBox" IsReadOnly="True" TextWrapping="Wrap" />
+
+            <TextBlock x:Name="ResultText" Text="No action yet." Opacity="0.75" TextWrapping="Wrap" />
         </StackPanel>
-
-        <TextBlock x:Name="ResultText" Text="No action yet." Foreground="#C0C0C0" TextWrapping="Wrap" />
-    </StackPanel>
+    </ScrollViewer>
 </Page>

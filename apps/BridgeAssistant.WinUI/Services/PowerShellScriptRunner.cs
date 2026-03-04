@@ -109,6 +109,7 @@ public sealed class PowerShellScriptRunner
       RedirectStandardOutput = true,
       RedirectStandardError = true,
       CreateNoWindow = true,
+      WorkingDirectory = Path.GetDirectoryName(scriptPath) ?? Directory.GetCurrentDirectory(),
     };
 
     startInfo.ArgumentList.Add("-NoProfile");
