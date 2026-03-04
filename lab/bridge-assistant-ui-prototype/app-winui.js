@@ -63,6 +63,12 @@ const certPathKey = document.getElementById('cert-path-key');
 const certStatusCert = document.getElementById('cert-status-cert');
 const certStatusKey = document.getElementById('cert-status-key');
 const certStatusRoot = document.getElementById('cert-status-root');
+const mkcertStatus = document.getElementById('mkcert-status');
+const dashStartNote = document.getElementById('dash-start-note');
+const runtimeStartNote = document.getElementById('runtime-start-note');
+const dashStartBtn = document.getElementById('dash-start');
+const wizLaunchBtn = document.getElementById('wiz-launch');
+const runtimeStartBtn = document.getElementById('btn-bridge-start');
 
 function timestamp() {
   return new Date().toLocaleTimeString('en-US', { hour12: false });
@@ -294,6 +300,44 @@ function isWssCertificateReady() {
   return findCheck('network.wss_cert')?.status === 'pass' && findCheck('network.wss_key')?.status === 'pass';
 }
 
+function isMkcertReady() {
+  return findCheck('network.mkcert')?.status === 'pass';
+}
+
+function getStartBlockingReason() {
+  if (state.bridgeRunning) {
+    return 'Bridge is already running. Stop first before starting again.';
+  }
+  if (state.settings.wssMode === 'required' && !isWssCertificateReady()) {
+    return 'WSS mode is Required. Complete certificate setup and re-run diagnostics first.';
+  }
+  return '';
+}
+
+function syncStartButtons() {
+  const blockReason = getStartBlockingReason();
+  const disabled = blockReason.length > 0;
+  const title = disabled ? blockReason : 'Start bridge';
+
+  [dashStartBtn, wizLaunchBtn, runtimeStartBtn].forEach((button) => {
+    if (!button) return;
+    button.disabled = disabled;
+    button.title = title;
+  });
+
+  const note = disabled ? blockReason : 'Start is available with current settings.';
+  if (runtimeStartNote) {
+    runtimeStartNote.textContent = note;
+    runtimeStartNote.classList.toggle('warn', disabled);
+  }
+  if (dashStartNote) {
+    dashStartNote.textContent = disabled
+      ? blockReason
+      : 'If WSS mode is Required, Start stays blocked until certificate and key checks pass.';
+    dashStartNote.classList.toggle('warn', disabled);
+  }
+}
+
 function updateHealthCounts() {
   const pass = countByStatus('pass');
   const warn = countByStatus('warn');
@@ -327,6 +371,7 @@ function setBridgeState(running, hasError = false) {
   if (dashCard) {
     dashCard.className = `health-card ${running ? 'pass' : hasError ? 'fail' : 'neutral'}`;
   }
+  syncStartButtons();
 }
 
 function formatUptime(seconds) {
@@ -350,6 +395,12 @@ function updateCertCards() {
   certStatusCert.textContent = cert === 'pass' ? 'Installed' : cert === 'fail' ? 'Missing' : 'Warning';
   certStatusKey.textContent = key === 'pass' ? 'Installed' : key === 'fail' ? 'Missing' : 'Warning';
   certStatusRoot.textContent = root === 'pass' ? 'Trusted' : root === 'fail' ? 'Failed' : 'Not verified';
+
+  if (mkcertStatus) {
+    const mkcert = findCheck('network.mkcert')?.status || 'warn';
+    mkcertStatus.className = `badge ${mkcert}`;
+    mkcertStatus.textContent = mkcert === 'pass' ? 'Ready' : mkcert === 'fail' ? 'Missing' : 'Needs check';
+  }
 }
 
 function updateWizardBadges() {
@@ -378,12 +429,12 @@ function updateWizardBadges() {
     step2.textContent = 'Action needed';
   }
 
-  if (isWssCertificateReady()) {
+  if (isMkcertReady() && isWssCertificateReady()) {
     step3.className = 'badge pass';
     step3.textContent = 'Complete';
   } else {
     step3.className = 'badge warn';
-    step3.textContent = 'Action needed';
+    step3.textContent = isMkcertReady() ? 'Generate cert' : 'Install mkcert';
   }
 
   if (state.bridgeRunning) {
@@ -470,6 +521,7 @@ function refreshUi() {
   updateEndpoints();
   updateWizardBadges();
   syncInfobar();
+  syncStartButtons();
 }
 
 function setInputsFromSettings() {
@@ -562,6 +614,17 @@ async function generateCertificate() {
   const command = buildCertCommand();
   addLog(`Preparing certificate setup: ${command}`);
 
+  const mkcertReady = isMkcertReady();
+  if (bridgeApi && typeof bridgeApi.runSetupCertificate === 'function' && !mkcertReady) {
+    addLog('Certificate setup blocked: mkcert is not ready. Install mkcert, then run diagnostics and retry.');
+    selectMkcertCheck(true);
+    return;
+  }
+
+  if (!bridgeApi && !mkcertReady) {
+    addLog('mkcert status is unknown in mock mode. Proceeding for UI demonstration only.');
+  }
+
   if (bridgeApi && typeof bridgeApi.runSetupCertificate === 'function') {
     try {
       await bridgeApi.runSetupCertificate({
@@ -641,8 +704,9 @@ async function startBridge() {
     return;
   }
 
-  if (state.settings.wssMode === 'required' && !isWssCertificateReady()) {
-    addLog('Start blocked: WSS is required but certificate/key are not ready.');
+  const blockedReason = getStartBlockingReason();
+  if (blockedReason) {
+    addLog(`Start blocked: ${blockedReason}`);
     return;
   }
 
@@ -702,6 +766,13 @@ function selectFirewallCheck() {
   if (wssCheck) {
     setCheckSelection(wssCheck.id);
   }
+}
+
+function selectMkcertCheck(navigate = false) {
+  const mkcertCheck = findCheck('network.mkcert');
+  if (!mkcertCheck) return;
+  if (navigate) navigateTo('preflight');
+  setCheckSelection(mkcertCheck.id);
 }
 
 function applyDomainFromCertInput() {
@@ -795,9 +866,17 @@ document.getElementById('wiz-show-firewall').addEventListener('click', () => {
   addLog('Firewall repair command selected. Run it in Administrator PowerShell.');
 });
 
+document.getElementById('wiz-rerun-after-firewall').addEventListener('click', async () => {
+  await runDiagnostics();
+});
+
 document.getElementById('wiz-generate-cert').addEventListener('click', async () => {
   navigateTo('certs');
   await generateCertificate();
+});
+
+document.getElementById('wiz-rerun-after-cert').addEventListener('click', async () => {
+  await runDiagnostics();
 });
 
 document.getElementById('wiz-launch').addEventListener('click', async () => {
@@ -811,6 +890,10 @@ document.getElementById('btn-run-all').addEventListener('click', async () => {
 
 document.getElementById('btn-select-firewall').addEventListener('click', () => {
   selectFirewallCheck();
+});
+
+document.getElementById('btn-rerun-after-repair').addEventListener('click', async () => {
+  await runDiagnostics();
 });
 
 document.getElementById('btn-copy-cmd').addEventListener('click', () => {
@@ -833,6 +916,18 @@ document.getElementById('btn-gen-cert').addEventListener('click', async () => {
 
 document.getElementById('btn-verify-trust').addEventListener('click', async () => {
   await verifyTrustViaDiagnostics();
+});
+
+document.getElementById('btn-rerun-cert-diagnostics').addEventListener('click', async () => {
+  await runDiagnostics();
+});
+
+document.getElementById('btn-check-prereq').addEventListener('click', async () => {
+  await runDiagnostics();
+});
+
+document.getElementById('btn-select-mkcert').addEventListener('click', () => {
+  selectMkcertCheck(true);
 });
 
 document.getElementById('btn-copy-cert-cmd').addEventListener('click', () => {

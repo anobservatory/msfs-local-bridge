@@ -19,7 +19,7 @@
   <body>
     <main class="app-window">
       <header class="titlebar" id="titlebar">
-        <div class="titlebar-left">
+          <div class="titlebar-left">
           <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
             <span class="msr">menu</span>
           </button>
@@ -32,8 +32,8 @@
             <span class="app-title">MSFS Bridge Assistant</span>
             <span class="app-version">Implementable WinUI Variant</span>
           </div>
-        </div>
-        <div class="caption-buttons" aria-hidden="true">
+          </div>
+          <div class="caption-buttons" aria-hidden="true">
           <button class="caption-btn" tabindex="-1" title="Minimize">
             <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
           </button>
@@ -43,8 +43,8 @@
           <button class="caption-btn close" tabindex="-1" title="Close">
             <svg width="10" height="10" viewBox="0 0 10 10"><path d="M0.5 0.5L9.5 9.5M9.5 0.5L0.5 9.5" stroke="currentColor" stroke-width="1.1"/></svg>
           </button>
-        </div>
-      </header>
+          </div>
+        </header>
 
       <div class="window-body">
         <nav class="nav-pane" id="navPane">
@@ -87,6 +87,16 @@
               <h1 class="page-title">Dashboard</h1>
             </div>
             <div class="view-body">
+              <div class="infobar caution" id="infobar-admin">
+                <span class="msr infobar-icon">admin_panel_settings</span>
+                <div class="infobar-content">
+                  <span class="infobar-title">Some fixes require Administrator approval. </span>
+                  <span class="infobar-msg">
+                    Firewall and trust-store actions must be run in Administrator PowerShell with UAC confirmation.
+                  </span>
+                </div>
+              </div>
+
               <div class="infobar caution" id="infobar-cert">
                 <span class="msr infobar-icon">warning</span>
                 <div class="infobar-content">
@@ -167,6 +177,9 @@
                   <span class="msr">terminal</span> Prepare Firewall Command
                 </button>
               </div>
+              <p class="helper-note" id="dash-start-note">
+                If WSS mode is <b>Required</b>, Start stays blocked until certificate and key checks pass.
+              </p>
 
               <div class="section-label">Recent Activity</div>
               <pre class="log-mini" id="dash-log">Bridge Assistant ready. Run diagnostics first.</pre>
@@ -180,7 +193,7 @@
             </div>
             <div class="view-body">
               <p class="page-desc">
-                Each step maps to an existing script. Admin-required steps are command-guided.
+                This wizard only runs actions that are safe to automate. Admin-required steps stay command-guided.
               </p>
 
               <div class="wizard-steps">
@@ -224,10 +237,11 @@
                     </div>
                     <div class="step-content">
                       <p class="step-desc">
-                        Required command is generated from selected check. Run it in Administrator PowerShell.
+                        Required command is generated from selected check. Run it in Administrator PowerShell and approve UAC.
                       </p>
                       <div class="step-actions">
                         <button class="btn" id="wiz-show-firewall"><span class="msr">terminal</span> Show Firewall Command</button>
+                        <button class="btn" id="wiz-rerun-after-firewall"><span class="msr">refresh</span> Re-run Diagnostics</button>
                         <button class="btn" data-nav="preflight"><span class="msr">open_in_new</span> Open Preflight</button>
                       </div>
                     </div>
@@ -249,10 +263,11 @@
                     </div>
                     <div class="step-content">
                       <p class="step-desc">
-                        Runs <code>setup-wss-cert-v0.ps1</code>. If <code>mkcert</code> is missing, install it first.
+                        Runs <code>setup-wss-cert-v0.ps1</code>. If <code>mkcert</code> is missing, first install it, then run this step again.
                       </p>
                       <div class="step-actions">
                         <button class="btn primary" id="wiz-generate-cert"><span class="msr">add_circle</span> Generate Certificate</button>
+                        <button class="btn" id="wiz-rerun-after-cert"><span class="msr">refresh</span> Re-run Diagnostics</button>
                         <button class="btn" data-nav="certs"><span class="msr">verified_user</span> Open Certificate Manager</button>
                       </div>
                     </div>
@@ -273,7 +288,7 @@
                     </div>
                     <div class="step-content">
                       <p class="step-desc">
-                        Launches <code>start-msfs-sync.ps1</code> with current settings. WSS mode follows configuration.
+                        Launches <code>start-msfs-sync.ps1</code> with current settings. If blocked, Runtime shows the exact reason.
                       </p>
                       <div class="step-actions">
                         <button class="btn primary" id="wiz-launch"><span class="msr">play_arrow</span> Start Bridge</button>
@@ -295,6 +310,12 @@
               </div>
             </div>
             <div class="view-body">
+              <div class="card">
+                <p class="helper-note">
+                  Auto-fix covers only non-elevated tasks. For firewall and trust-store changes, copy command, run in Administrator
+                  PowerShell, then come back and re-run diagnostics.
+                </p>
+              </div>
               <div class="check-table-wrap">
                 <div class="check-table-header">
                   <span>Check</span>
@@ -307,10 +328,13 @@
               <div class="command-box">
                 <div class="cmd-header">
                   <span class="msr cmd-ps-icon">terminal</span>
-                  <span class="cmd-label">PowerShell</span>
+                  <span class="cmd-label">PowerShell (Admin when noted)</span>
                   <button class="btn-icon" id="btn-copy-cmd" title="Copy command"><span class="msr">content_copy</span></button>
                 </div>
                 <code class="cmd-text" id="repair-cmd">Select a check row to show repair command.</code>
+              </div>
+              <div class="card-actions">
+                <button class="btn" id="btn-rerun-after-repair"><span class="msr">refresh</span> Re-run Diagnostics</button>
               </div>
             </div>
           </section>
@@ -320,6 +344,21 @@
               <h1 class="page-title">Certificate Manager</h1>
             </div>
             <div class="view-body">
+              <div class="section-label">Prerequisites</div>
+              <div class="card">
+                <div class="prereq-row">
+                  <span class="prereq-label">mkcert on PATH</span>
+                  <span class="badge warn" id="mkcert-status">Check needed</span>
+                </div>
+                <p class="field-hint">
+                  If missing, install <code>mkcert</code> first. Certificate generation cannot complete until this prerequisite is ready.
+                </p>
+                <div class="card-actions">
+                  <button class="btn" id="btn-check-prereq"><span class="msr">refresh</span> Check Now</button>
+                  <button class="btn" id="btn-select-mkcert"><span class="msr">fact_check</span> Show mkcert Check</button>
+                </div>
+              </div>
+
               <div class="section-label">Local Domain</div>
               <div class="card">
                 <div class="field-group">
@@ -374,6 +413,7 @@
               <div class="card-actions">
                 <button class="btn primary" id="btn-gen-cert"><span class="msr">add_circle</span> Generate + Install</button>
                 <button class="btn" id="btn-verify-trust"><span class="msr">verified</span> Verify via Diagnostics</button>
+                <button class="btn" id="btn-rerun-cert-diagnostics"><span class="msr">refresh</span> Re-run Diagnostics</button>
                 <button class="btn" id="btn-copy-cert-cmd"><span class="msr">content_copy</span> Copy Cert Command</button>
               </div>
 
@@ -405,6 +445,7 @@
                     <button class="btn" id="btn-bridge-restart"><span class="msr">restart_alt</span> Restart</button>
                   </div>
                 </div>
+                <p class="runtime-note" id="runtime-start-note">Start is available with current settings.</p>
 
                 <div class="runtime-endpoints">
                   <div class="runtime-ep">
@@ -506,7 +547,8 @@
                 </div>
               </div>
 
-              <div class="settings-section">
+              <details class="settings-section advanced-panel" id="advanced-settings">
+                <summary class="advanced-summary">Advanced tuning (optional)</summary>
                 <div class="section-label">Performance</div>
                 <div class="settings-card">
                   <div class="setting-row">
@@ -531,9 +573,7 @@
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div class="settings-section">
                 <div class="section-label">Reconnect</div>
                 <div class="settings-card">
                   <div class="setting-row">
@@ -557,6 +597,16 @@
                       <span class="unit-label">ms</span>
                     </div>
                   </div>
+                </div>
+              </details>
+
+              <div class="settings-section">
+                <div class="section-label">Desktop Frame</div>
+                <div class="card">
+                  <p class="helper-note">
+                    In the real app, window caption buttons and titlebar behavior follow the native framework rules,
+                    not exact HTML mockup pixels.
+                  </p>
                 </div>
               </div>
             </div>
