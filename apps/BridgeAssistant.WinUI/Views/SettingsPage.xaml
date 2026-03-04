@@ -1,0 +1,39 @@
+<Page
+    x:Class="BridgeAssistant.WinUI.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer>
+        <StackPanel Spacing="14" Padding="24">
+            <TextBlock Text="Settings" FontSize="28" FontWeight="SemiBold" />
+            <TextBlock Text="Advanced tuning is optional. Default values are recommended for non-advanced users." Foreground="#C0C0C0" TextWrapping="Wrap" />
+
+            <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="8">
+                <TextBlock Text="Bind host" />
+                <TextBox Grid.Column="1" x:Name="BindHostBox" />
+
+                <TextBlock Grid.Row="1" Text="WS port" />
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="WsPortBox" />
+
+                <TextBlock Grid.Row="2" Text="WSS port" />
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="WssPortBox" />
+
+                <TextBlock Grid.Row="3" Text="Domain" />
+                <TextBox Grid.Row="3" Grid.Column="1" x:Name="DomainBox" />
+
+                <TextBlock Grid.Row="4" Text="WSS mode" />
+                <ComboBox Grid.Row="4" Grid.Column="1" x:Name="WssModeBox">
+                    <x:String>Auto</x:String>
+                    <x:String>Disabled</x:String>
+                    <x:String>Required</x:String>
+                </ComboBox>
+            </Grid>
+
+            <Button Content="Apply" Click="OnApplyClick" HorizontalAlignment="Left" />
+            <TextBlock x:Name="ApplyResultText" Text="" Foreground="#C0C0C0" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

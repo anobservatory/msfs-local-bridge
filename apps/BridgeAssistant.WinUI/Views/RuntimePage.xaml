@@ -1,0 +1,28 @@
+<Page
+    x:Class="BridgeAssistant.WinUI.Views.RuntimePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Padding="24" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
+        <TextBlock Text="Bridge Runtime" FontSize="28" FontWeight="SemiBold" />
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+            <Button x:Name="StartButton" Content="Start" Click="OnStartClick" />
+            <Button x:Name="StopButton" Content="Stop" Click="OnStopClick" />
+            <Button x:Name="RestartButton" Content="Restart" Click="OnRestartClick" />
+        </StackPanel>
+
+        <TextBox
+            Grid.Row="2"
+            x:Name="RuntimeLogBox"
+            IsReadOnly="True"
+            TextWrapping="Wrap"
+            AcceptsReturn="True"
+            VerticalScrollBarVisibility="Auto" />
+
+        <TextBlock Grid.Row="3" x:Name="RuntimeStateText" Text="Bridge state: idle" Foreground="#C0C0C0" />
+    </Grid>
+</Page>

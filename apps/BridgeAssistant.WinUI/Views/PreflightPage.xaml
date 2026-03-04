@@ -1,0 +1,35 @@
+<Page
+    x:Class="BridgeAssistant.WinUI.Views.PreflightPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Padding="24" RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="12">
+        <TextBlock Text="Preflight Checks" FontSize="28" FontWeight="SemiBold" />
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+            <Button x:Name="RunDiagnosticsButton" Content="Run Diagnostics" Click="OnRunDiagnosticsClick" />
+            <Button Content="Select Firewall Check" Click="OnSelectFirewallClick" />
+        </StackPanel>
+
+        <ListView x:Name="ChecksList" Grid.Row="2" SelectionChanged="OnCheckSelectionChanged">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid ColumnDefinitions="*,Auto" Padding="6,2">
+                        <TextBlock Text="{Binding Label}" TextWrapping="Wrap" Margin="0,0,8,0" />
+                        <TextBlock Grid.Column="1" Text="{Binding StatusText}" Foreground="#C0C0C0" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <TextBlock Grid.Row="3" Text="Repair command" FontWeight="SemiBold" />
+
+        <Grid Grid.Row="4" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBox x:Name="RepairCommandBox" IsReadOnly="True" TextWrapping="Wrap" MinHeight="70" />
+            <Button Grid.Column="1" Content="Copy" Click="OnCopyCommandClick" VerticalAlignment="Top" />
+        </Grid>
+    </Grid>
+</Page>
