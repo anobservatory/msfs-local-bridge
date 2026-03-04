@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bridge Assistant - Windows Native Variant</title>
+    <link rel="stylesheet" href="./styles-windows.css" />
+  </head>
+  <body>
+    <main class="app-window">
+      <header class="titlebar">
+        <div class="titlebar-left">
+          <div class="app-icon" aria-hidden="true"></div>
+          <div>
+            <p class="title">MSFS Bridge Assistant</p>
+            <p class="sub-title">Windows Native Variant (Concept)</p>
+          </div>
+        </div>
+        <div class="titlebar-buttons" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </header>
+
+      <div class="window-body">
+        <nav class="left-nav">
+          <p class="nav-label">Navigation</p>
+          <button class="nav-item is-active" data-target="wizard">
+            Getting Started
+          </button>
+          <button class="nav-item" data-target="preflight">System Checks</button>
+          <button class="nav-item" data-target="certs">Certificate Manager</button>
+          <button class="nav-item" data-target="runtime">Bridge Session</button>
+        </nav>
+
+        <section class="main-pane">
+          <header class="pane-header">
+            <div>
+              <h1>Bridge Control Center</h1>
+              <p>
+                Onboard users with a guided setup, then keep live health and
+                certificate status visible in one place.
+              </p>
+            </div>
+            <div class="health-strip">
+              <article>
+                <p>Passed</p>
+                <strong id="summary-pass">5</strong>
+              </article>
+              <article class="warn">
+                <p>Warnings</p>
+                <strong id="summary-warn">3</strong>
+              </article>
+              <article class="fail">
+                <p>Failures</p>
+                <strong id="summary-fail">2</strong>
+              </article>
+            </div>
+          </header>
+
+          <article class="panel section is-visible" id="wizard">
+            <div class="panel-head">
+              <h2>Guided Setup</h2>
+              <span class="badge">First run</span>
+            </div>
+            <ol class="timeline">
+              <li>
+                <h3>Detect simulator environment</h3>
+                <p>Find MSFS location and validate SimConnect compatibility.</p>
+              </li>
+              <li>
+                <h3>Validate runtime and network policy</h3>
+                <p>Check architecture, ports, firewall rules, and shell mode.</p>
+              </li>
+              <li>
+                <h3>Provision secure local TLS</h3>
+                <p>Create certs and verify root trust for WSS clients.</p>
+              </li>
+              <li>
+                <h3>Start bridge and confirm client connection</h3>
+                <p>Run final verification before moving into normal operation.</p>
+              </li>
+            </ol>
+            <div class="actions">
+              <button class="btn primary" id="btn-run-scan">Run checks</button>
+              <button class="btn" id="btn-auto-fix">Auto fix</button>
+            </div>
+          </article>
+
+          <article class="panel section" id="preflight">
+            <div class="panel-head">
+              <h2>System Checks</h2>
+              <span class="badge">Diagnostics</span>
+            </div>
+            <div class="check-table" id="checks"></div>
+            <div class="command-box">
+              <p>Recommended PowerShell command</p>
+              <code id="repair-command"
+                >.\setup-wss-cert-v0.ps1 -LocalDomain bridge.local</code
+              >
+            </div>
+          </article>
+
+          <article class="panel section" id="certs">
+            <div class="panel-head">
+              <h2>Certificate Manager</h2>
+              <span class="badge">Security</span>
+            </div>
+            <div class="cert-layout">
+              <article class="cert-item" id="card-cert">
+                <h3>Server certificate</h3>
+                <p class="status fail">Missing</p>
+                <p>Path: <code>certs/bridge.local.pem</code></p>
+              </article>
+              <article class="cert-item" id="card-key">
+                <h3>Private key</h3>
+                <p class="status fail">Missing</p>
+                <p>Path: <code>certs/bridge.local-key.pem</code></p>
+              </article>
+              <article class="cert-item" id="card-root">
+                <h3>Root trust chain</h3>
+                <p class="status warn">Unverified</p>
+                <p>Store: <code>LocalMachine\Root</code></p>
+              </article>
+            </div>
+            <div class="actions">
+              <button class="btn primary" id="btn-generate-cert">
+                Generate and install
+              </button>
+              <button class="btn" id="btn-verify-cert">Verify trust</button>
+            </div>
+          </article>
+
+          <article class="panel section" id="runtime">
+            <div class="panel-head">
+              <h2>Bridge Session</h2>
+              <span class="badge">Live</span>
+            </div>
+            <div class="actions">
+              <button class="btn primary" id="btn-start">Start bridge</button>
+              <button class="btn" id="btn-stop">Stop</button>
+              <span class="runtime-state" id="runtime-state">Idle</span>
+            </div>
+            <pre class="log-console" id="log-console"></pre>
+          </article>
+        </section>
+
+        <aside class="right-panel">
+          <h2>Quick actions</h2>
+          <button class="quick">Run `preflight-v0.ps1`</button>
+          <button class="quick">Run `setup-wss-cert-v0.ps1`</button>
+          <button class="quick">Run `diagnostics-v0.ps1`</button>
+          <hr />
+          <h3>Connection targets</h3>
+          <p><code>ws://192.168.0.24:39000</code></p>
+          <p><code>wss://bridge.local:39002</code></p>
+        </aside>
+      </div>
+    </main>
+
+    <script src="./app-windows.js"></script>
+  </body>
+</html>
