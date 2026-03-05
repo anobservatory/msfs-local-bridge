@@ -153,7 +153,7 @@ $keyPath = Join-Path $certRoot "$safeCertBase-key.pem"
 $rootCaPath = Join-Path $certRoot "rootCA.pem"
 $wssRequested = -not $DisableWss
 $wssReady = $false
-$lanIps = Get-PrivateLanIPv4
+$lanIps = @(Get-PrivateLanIPv4)
 $bootstrapHostIp = if ($lanIps.Count -gt 0) { $lanIps[0] } else { "" }
 $wssConnectHost = if (-not [string]::IsNullOrWhiteSpace($bootstrapHostIp)) { $bootstrapHostIp } else { $LocalDomain }
 

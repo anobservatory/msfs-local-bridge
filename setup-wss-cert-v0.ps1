@@ -136,7 +136,7 @@ New-Item -ItemType Directory -Path $certRoot -Force | Out-Null
 $certPath = Join-Path $certRoot "$safeBase.pem"
 $keyPath = Join-Path $certRoot "$safeBase-key.pem"
 $rootCaExportPath = Join-Path $certRoot "rootCA.pem"
-$lanIps = Get-PrivateLanIPv4
+$lanIps = @(Get-PrivateLanIPv4)
 $subjects = @($LocalDomain, "localhost", "127.0.0.1", "::1")
 if ($lanIps.Count -gt 0) {
   $subjects += $lanIps

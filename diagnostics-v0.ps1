@@ -332,7 +332,7 @@ else {
   Add-Check -Id "dependency.vc_redist_x64" -Status "warn" -Message "Visual C++ Redistributable (x64) not detected" -RepairAction "Install Microsoft Visual C++ 2015-2022 Redistributable (x64)."
 }
 
-$lanIps = Get-PrivateLanIPv4
+$lanIps = @(Get-PrivateLanIPv4)
 if ($lanIps.Count -gt 0) {
   $preview = @($lanIps | Select-Object -First 3)
   $sampleUrl = "ws://$($preview[0]):$Port/stream"

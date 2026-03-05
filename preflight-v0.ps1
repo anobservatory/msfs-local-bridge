@@ -324,7 +324,7 @@ else {
   Write-Check -Status PASS -Message "PowerShell is running as standard user (recommended)"
 }
 
-$lanIps = Get-PrivateLanIPv4
+$lanIps = @(Get-PrivateLanIPv4)
 if ($lanIps.Count -gt 0) {
   $preview = @($lanIps | Select-Object -First 2)
   $sampleUrl = "ws://$($preview[0]):$Port/stream"
