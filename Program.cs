@@ -64,6 +64,8 @@ app.MapGet("/", (BridgeOptions options) => Results.Json(new
   wssPort = options.WssEnabled ? options.WssPort : (int?)null,
   wssCertPath = options.WssEnabled ? options.TlsCertPath : null,
   wssKeyPath = options.WssEnabled ? options.TlsKeyPath : null,
+  wssPfxPath = options.WssEnabled ? options.TlsPfxPath : null,
+  wssCertMode = options.WssEnabled ? (options.HasPfxCertificate ? "pfx" : "pem") : null,
   bootstrapEnabled = options.BootstrapEnabled,
   bootstrapPath = options.BootstrapEnabled ? options.BootstrapPath : null,
   bootstrapUrl = options.BootstrapEnabled ? BuildBootstrapBaseUrl(options) : null,
@@ -132,7 +134,6 @@ if (bridgeOptions.BootstrapEnabled)
     }
   });
 
-  app.MapGet($"{bootstrapBasePath}/", () => Results.Redirect(bootstrapBasePath));
 
   app.MapGet($"{bootstrapBasePath}/manifest.json", () => Results.Json(new
   {
@@ -378,6 +379,30 @@ static bool IsSimConnectLoadFailure(FileNotFoundException ex)
 
 static X509Certificate2 LoadWssCertificate(BridgeOptions options)
 {
+  if (options.HasPfxCertificate)
+  {
+    var pfxPath = ResolveRuntimePath(options.TlsPfxPath);
+    if (!File.Exists(pfxPath))
+    {
+      throw new FileNotFoundException(
+        $"WSS PKCS#12 certificate file not found. Set MSFS_BRIDGE_TLS_PFX_PATH or create file at '{pfxPath}'.",
+        pfxPath
+      );
+    }
+
+    try
+    {
+      return new X509Certificate2(pfxPath, options.TlsPfxPassword);
+    }
+    catch (Exception ex)
+    {
+      throw new InvalidOperationException(
+        $"Failed to load WSS PKCS#12 certificate from pfx='{pfxPath}'.",
+        ex
+      );
+    }
+  }
+
   var certPath = ResolveRuntimePath(options.TlsCertPath);
   var keyPath = ResolveRuntimePath(options.TlsKeyPath);
 
@@ -600,6 +625,9 @@ internal sealed class BridgeOptions
   public string WssPublicHost { get; }
   public string TlsCertPath { get; }
   public string TlsKeyPath { get; }
+  public string TlsPfxPath { get; }
+  public string TlsPfxPassword { get; }
+  public bool HasPfxCertificate => TlsPfxPath.Length > 0;
   public bool BootstrapEnabled { get; }
   public string BootstrapPath { get; }
   public string BootstrapHostIp { get; }
@@ -624,6 +652,8 @@ internal sealed class BridgeOptions
     string wssPublicHost,
     string tlsCertPath,
     string tlsKeyPath,
+    string tlsPfxPath,
+    string tlsPfxPassword,
     bool bootstrapEnabled,
     string bootstrapPath,
     string bootstrapHostIp,
@@ -648,6 +678,8 @@ internal sealed class BridgeOptions
     WssPublicHost = wssPublicHost;
     TlsCertPath = tlsCertPath;
     TlsKeyPath = tlsKeyPath;
+    TlsPfxPath = tlsPfxPath;
+    TlsPfxPassword = tlsPfxPassword;
     BootstrapEnabled = bootstrapEnabled;
     BootstrapPath = bootstrapPath;
     BootstrapHostIp = bootstrapHostIp;
@@ -674,6 +706,8 @@ internal sealed class BridgeOptions
     var wssPublicHost = ReadString("MSFS_BRIDGE_PUBLIC_WSS_HOST", "ao.home.arpa");
     var tlsCertPath = ReadString("MSFS_BRIDGE_TLS_CERT_PATH", Path.Combine("certs", "ao.home.arpa.pem"));
     var tlsKeyPath = ReadString("MSFS_BRIDGE_TLS_KEY_PATH", Path.Combine("certs", "ao.home.arpa-key.pem"));
+    var tlsPfxPath = ReadString("MSFS_BRIDGE_TLS_PFX_PATH", string.Empty);
+    var tlsPfxPassword = ReadString("MSFS_BRIDGE_TLS_PFX_PASSWORD", "changeit");
     var bootstrapEnabled = ReadBool("MSFS_BRIDGE_BOOTSTRAP_ENABLED", true);
     var bootstrapPath = NormalizePath(ReadString("MSFS_BRIDGE_BOOTSTRAP_PATH", "/bootstrap"));
     var bootstrapHostIp = ReadString("MSFS_BRIDGE_BOOTSTRAP_HOST_IP", string.Empty);
@@ -699,6 +733,8 @@ internal sealed class BridgeOptions
       wssPublicHost: wssPublicHost,
       tlsCertPath: tlsCertPath,
       tlsKeyPath: tlsKeyPath,
+      tlsPfxPath: tlsPfxPath,
+      tlsPfxPassword: tlsPfxPassword,
       bootstrapEnabled: bootstrapEnabled,
       bootstrapPath: bootstrapPath,
       bootstrapHostIp: bootstrapHostIp,
@@ -1380,3 +1416,4 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     public int TransponderCode;
   }
 }
+

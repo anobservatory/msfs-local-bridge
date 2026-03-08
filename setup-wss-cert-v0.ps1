@@ -135,6 +135,7 @@ New-Item -ItemType Directory -Path $certRoot -Force | Out-Null
 
 $certPath = Join-Path $certRoot "$safeBase.pem"
 $keyPath = Join-Path $certRoot "$safeBase-key.pem"
+$pfxPath = Join-Path $certRoot "$safeBase.p12"
 $rootCaExportPath = Join-Path $certRoot "rootCA.pem"
 $lanIps = @(Get-PrivateLanIPv4)
 $subjects = @($LocalDomain, "localhost", "127.0.0.1", "::1")
@@ -147,6 +148,7 @@ Write-Host "MSFS Local Bridge WSS Certificate Setup" -ForegroundColor Cyan
 Write-Host "  domain: $LocalDomain"
 Write-Host "  cert:   $certPath"
 Write-Host "  key:    $keyPath"
+Write-Host "  pfx:    $pfxPath"
 Write-Host "  mkcert: $mkcertPath"
 Write-Host ""
 
@@ -158,10 +160,16 @@ if (-not $SkipInstall) {
   }
 }
 
-Write-Host "Generating certificate..."
+Write-Host "Generating PEM certificate..."
 & $mkcertPath -cert-file $certPath -key-file $keyPath @subjects
 if ($LASTEXITCODE -ne 0) {
   throw "mkcert certificate generation failed with exit code $LASTEXITCODE"
+}
+
+Write-Host "Generating PKCS#12 bundle..."
+& $mkcertPath -pkcs12 -p12-file $pfxPath @subjects
+if ($LASTEXITCODE -ne 0) {
+  throw "mkcert PKCS#12 generation failed with exit code $LASTEXITCODE"
 }
 
 try {
@@ -178,7 +186,7 @@ catch {
 }
 
 Write-Host ""
-Write-Host "[PASS] WSS certificate generated." -ForegroundColor Green
+Write-Host "[PASS] WSS certificate bundle generated." -ForegroundColor Green
 Write-Host "Subjects: $($subjects -join ', ')"
 if (Test-Path $rootCaExportPath) {
   Write-Host "Root CA: $rootCaExportPath"
@@ -196,3 +204,5 @@ if ($lanIps.Count -gt 0) {
 Write-Host ""
 Write-Host "Run bridge:"
 Write-Host "  .\\start-msfs-sync.ps1 -LocalDomain $LocalDomain"
+
+

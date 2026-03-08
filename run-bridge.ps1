@@ -150,19 +150,25 @@ $safeCertBase = Get-SafeCertBaseName -Domain $LocalDomain
 $certRoot = Resolve-PathUnderRoot -Root $PSScriptRoot -PathValue $CertDir
 $certPath = Join-Path $certRoot "$safeCertBase.pem"
 $keyPath = Join-Path $certRoot "$safeCertBase-key.pem"
+$pfxPath = Join-Path $certRoot "$safeCertBase.p12"
 $rootCaPath = Join-Path $certRoot "rootCA.pem"
 $wssRequested = -not $DisableWss
 $wssReady = $false
+$wssUsesPfx = $false
 $lanIps = @(Get-PrivateLanIPv4)
 $bootstrapHostIp = if ($lanIps.Count -gt 0) { $lanIps[0] } else { "" }
 $wssConnectHost = if (-not [string]::IsNullOrWhiteSpace($bootstrapHostIp)) { $bootstrapHostIp } else { $LocalDomain }
 
 if ($wssRequested) {
-  if ((Test-Path $certPath) -and (Test-Path $keyPath)) {
+  if (Test-Path $pfxPath) {
+    $wssReady = $true
+    $wssUsesPfx = $true
+  }
+  elseif ((Test-Path $certPath) -and (Test-Path $keyPath)) {
     $wssReady = $true
   }
   elseif ($RequireWss) {
-    throw "WSS is required but certificate files are missing. Expected cert='$certPath', key='$keyPath'. Run .\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain"
+    throw "WSS is required but certificate files are missing. Expected pfx='$pfxPath' or cert='$certPath', key='$keyPath'. Run .\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain"
   }
 
   if (-not $wssReady) {
@@ -178,6 +184,8 @@ $env:MSFS_BRIDGE_WSS_PORT = "$WssPort"
 $env:MSFS_BRIDGE_PUBLIC_WSS_HOST = "$wssConnectHost"
 $env:MSFS_BRIDGE_TLS_CERT_PATH = "$certPath"
 $env:MSFS_BRIDGE_TLS_KEY_PATH = "$keyPath"
+$env:MSFS_BRIDGE_TLS_PFX_PATH = if ($wssUsesPfx) { "$pfxPath" } else { "" }
+$env:MSFS_BRIDGE_TLS_PFX_PASSWORD = if ($wssUsesPfx) { "changeit" } else { "" }
 $env:MSFS_BRIDGE_BOOTSTRAP_ENABLED = "true"
 $env:MSFS_BRIDGE_BOOTSTRAP_PATH = "/bootstrap"
 $env:MSFS_BRIDGE_BOOTSTRAP_HOST_IP = "$bootstrapHostIp"
@@ -198,6 +206,7 @@ Write-Host "  bind:   ws://$BindHost`:$Port$StreamPath"
 Write-Host "  local:  ws://127.0.0.1`:$Port$StreamPath"
 if ($wssReady) {
   Write-Host "  secure: wss://$wssConnectHost`:$WssPort$StreamPath"
+  Write-Host "  secure cert mode: $(if ($wssUsesPfx) { 'pfx' } else { 'pem' })"
   if ($wssConnectHost -ne $LocalDomain) {
     Write-Host "  fallback secure (hosts mapping required): wss://$LocalDomain`:$WssPort$StreamPath"
   }
@@ -280,3 +289,7 @@ if (Test-Path $dllPath) {
 }
 
 throw "No runnable bridge target found. Expected one of: MsfsLocalBridge.exe, MsfsLocalBridge.csproj, MsfsLocalBridge.dll"
+
+
+
+
