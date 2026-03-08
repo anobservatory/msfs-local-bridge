@@ -1,0 +1,289 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MSFS Local Bridge Host App Mockup</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="frame">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">MSFS Local Bridge for Windows</p>
+          <h1>Host Console</h1>
+        </div>
+        <div class="topbar-side">
+          <div class="pill warn">2 blockers</div>
+          <div class="pill">Secure mode required</div>
+        </div>
+      </header>
+
+      <section class="status-strip">
+        <article class="status-card warn-card status-card-prereq">
+          <span>.NET Desktop Runtime x64</span>
+          <strong>Missing</strong>
+        </article>
+        <article class="status-card">
+          <span>SimConnect</span>
+          <strong>Waiting for flight</strong>
+        </article>
+        <article class="status-card">
+          <span>Bridge</span>
+          <strong>Stopped</strong>
+        </article>
+        <article class="status-card">
+          <span>Bootstrap</span>
+          <strong>Ready</strong>
+        </article>
+      </section>
+
+      <main class="shell">
+        <aside class="sidebar">
+          <button class="tab-btn active" data-tab="overview">Overview</button>
+          <button class="tab-btn" data-tab="setup">Setup</button>
+          <button class="tab-btn" data-tab="runtime">Runtime</button>
+        </aside>
+
+        <section class="tab-content">
+          <section class="tab-panel active" data-panel="overview">
+            <section class="panel hero-panel">
+              <div>
+                <p class="section-kicker">Daily Use</p>
+                <h2>Start the bridge and confirm the host is healthy.</h2>
+                <p class="body-copy">
+                  After first-run setup, most sessions should begin and end here. Keep the bridge
+                  button obvious and the connect handoff close by.
+                </p>
+              </div>
+              <div class="hero-actions">
+                <button class="primary big">Start Bridge</button>
+                <button>Stop</button>
+                <button>Restart</button>
+              </div>
+            </section>
+
+            <section class="overview-grid">
+              <section class="panel control-panel">
+                <div class="panel-head">
+                  <div>
+                    <p class="section-kicker">Control</p>
+                    <h3>Bridge control</h3>
+                  </div>
+                  <div class="pill ok">Stopped</div>
+                </div>
+                <div class="mini-grid">
+                  <div class="mini-card emphasis">
+                    <span>Primary action</span>
+                    <strong>Start Bridge</strong>
+                  </div>
+                  <div class="mini-card">
+                    <span>Host IP</span>
+                    <strong>192.168.0.24</strong>
+                  </div>
+                  <div class="mini-card">
+                    <span>Secure stream</span>
+                    <strong>39002 /stream</strong>
+                  </div>
+                  <div class="mini-card">
+                    <span>Last issue</span>
+                    <strong>.NET runtime missing</strong>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel handoff-panel">
+                <div class="panel-head">
+                  <div>
+                    <p class="section-kicker">Listener Handoff</p>
+                    <h3>Open on another device</h3>
+                  </div>
+                  <div class="pill">Same Wi-Fi</div>
+                </div>
+                <p class="label">Secure connect URL</p>
+                <code>https://anobservatory.com/?msfsBridgeUrl=wss%3A%2F%2F192.168.0.24%3A39002%2Fstream</code>
+                <div class="hero-actions compact-actions">
+                  <button class="primary">Copy Link</button>
+                  <button>Copy Bootstrap URL</button>
+                </div>
+                <div class="inline-note device-note">
+                  <strong>First time on MacBook or mobile?</strong> Open the bootstrap page first for
+                  device-specific certificate steps, then open the connect URL.
+                </div>
+              </section>
+            </section>
+          </section>
+
+          <section class="tab-panel" data-panel="setup">
+            <section class="panel setup-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">First Run</p>
+                  <h2>Prepare this PC</h2>
+                </div>
+                <div class="pill warn">Needs attention</div>
+              </div>
+
+              <div class="step-list">
+                <article class="step done">
+                  <div class="step-index">1</div>
+                  <div class="step-body">
+                    <h3>Bridge files and ports</h3>
+                    <p>SimConnect DLLs present. Bridge files OK. Required ports available.</p>
+                  </div>
+                  <div class="step-side">
+                    <span class="state ok">Passed</span>
+                    <button>Details</button>
+                  </div>
+                </article>
+
+                <article class="step current">
+                  <div class="step-index">2</div>
+                  <div class="step-body">
+                    <h3>.NET Desktop Runtime x64</h3>
+                    <p>Required for the Windows host app. Install this before bridge startup.</p>
+                    <div class="inline-note">
+                      <strong>Current:</strong> not installed on this PC.
+                    </div>
+                  </div>
+                  <div class="step-side">
+                    <span class="state pending">Action</span>
+                    <button class="primary">Install .NET Runtime</button>
+                  </div>
+                </article>
+
+                <article class="step done">
+                  <div class="step-index">3</div>
+                  <div class="step-body">
+                    <h3>VC++ Redistributable x64</h3>
+                    <p>Required for native bridge dependencies including SimConnect runtime pieces.</p>
+                  </div>
+                  <div class="step-side">
+                    <span class="state ok">Installed</span>
+                    <button>Details</button>
+                  </div>
+                </article>
+
+                <article class="step">
+                  <div class="step-index">4</div>
+                  <div class="step-body">
+                    <h3>Secure mode</h3>
+                    <p>Generate local WSS certificate and trust material for browser-safe connection.</p>
+                  </div>
+                  <div class="step-side">
+                    <span class="state muted">Locked</span>
+                    <button disabled>Set Up Secure Mode</button>
+                  </div>
+                </article>
+
+                <article class="step">
+                  <div class="step-index">5</div>
+                  <div class="step-body">
+                    <h3>Firewall</h3>
+                    <p>Open only the required inbound rules for local bridge access.</p>
+                  </div>
+                  <div class="step-side">
+                    <span class="state muted">Locked</span>
+                    <button disabled>Open Firewall Rules</button>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+            <section class="panel listener-guide-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">Listener Devices</p>
+                  <h2>Certificate and bootstrap guide</h2>
+                </div>
+                <div class="pill">One-time per device</div>
+              </div>
+
+              <div class="guide-grid">
+                <article class="guide-card">
+                  <p class="label">MacBook</p>
+                  <h3>Run bootstrap first</h3>
+                  <p>Download the root CA, trust it in macOS, then open the AO connect URL.</p>
+                  <div class="hero-actions compact-actions">
+                    <button class="primary">Copy Mac Setup Command</button>
+                    <button>Open Bootstrap Page</button>
+                  </div>
+                </article>
+
+                <article class="guide-card">
+                  <p class="label">Windows Listener</p>
+                  <h3>Use PowerShell bootstrap</h3>
+                  <p>Import the root CA into the current user trust store and apply host mapping when needed.</p>
+                  <div class="hero-actions compact-actions">
+                    <button>Copy Windows Setup</button>
+                  </div>
+                </article>
+
+                <article class="guide-card">
+                  <p class="label">Mobile</p>
+                  <h3>Manual trust steps</h3>
+                  <p>Open the bootstrap page, download the root certificate, trust it manually, then open AO.</p>
+                  <div class="hero-actions compact-actions">
+                    <button>Open Mobile Guide</button>
+                  </div>
+                </article>
+              </div>
+            </section>
+          </section>
+
+          <section class="tab-panel" data-panel="runtime">
+            <section class="runtime-grid">
+              <section class="panel runtime-info-panel">
+                <div class="panel-head">
+                  <div>
+                    <p class="section-kicker">Runtime</p>
+                    <h2>Bridge log and support</h2>
+                  </div>
+                  <div class="pill ok">Stopped</div>
+                </div>
+                <div class="hero-actions compact-actions">
+                  <button class="primary">Copy Log</button>
+                  <button>Clear</button>
+                  <button>Copy Diagnostics</button>
+                </div>
+                <pre class="log-view">[09:05:12] prerequisite-check: .NET Desktop Runtime x64 not found
+[09:05:13] prerequisite-check: VC++ Redistributable x64 detected
+[09:05:18] preflight: SimConnect DLL found at .\lib\Microsoft.FlightSimulator.SimConnect.dll
+[09:05:18] preflight: SimConnect native DLL found at .\lib\SimConnect.dll
+[09:05:20] bridge: secure mode locked until runtime requirement is satisfied
+[09:05:20] bridge: Start Bridge blocked by missing prerequisite</pre>
+              </section>
+
+              <section class="panel events-panel">
+                <div class="panel-head">
+                  <div>
+                    <p class="section-kicker">Recent Events</p>
+                    <h2>What changed</h2>
+                  </div>
+                </div>
+                <div class="timeline">
+                  <article class="event warn-event">
+                    <span class="event-time">09:05</span>
+                    <div>
+                      <h3>.NET Desktop Runtime not found</h3>
+                      <p>Install runtime before secure setup and bridge start.</p>
+                    </div>
+                  </article>
+                  <article class="event ok-event">
+                    <span class="event-time">09:07</span>
+                    <div>
+                      <h3>VC++ Redistributable detected</h3>
+                      <p>Native dependency is already satisfied.</p>
+                    </div>
+                  </article>
+                </div>
+              </section>
+            </section>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
