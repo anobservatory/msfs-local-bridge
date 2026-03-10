@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$BindHost = "0.0.0.0",
   [int]$Port = 39000,
   [int]$WssPort = 39002,
@@ -9,6 +9,10 @@ param(
   [int]$PollIntervalMs = 25,
   [int]$ReconnectDelayMs = 2000,
   [int]$ReconnectMaxDelayMs = 10000,
+  [ValidateSet("embedded", "worker")]
+  [string]$SimConnectMode = "embedded",
+  [string]$SimConnectWorkerPath = "",
+  [string]$SimConnectWorkerArgs = "--stdio-json",
   [switch]$SkipLanHints,
   [switch]$DisableWss,
   [switch]$RequireWss
@@ -145,6 +149,14 @@ $env:MSFS_BRIDGE_SAMPLE_MS = "$SampleIntervalMs"
 $env:MSFS_BRIDGE_POLL_MS = "$PollIntervalMs"
 $env:MSFS_BRIDGE_RECONNECT_MS = "$ReconnectDelayMs"
 $env:MSFS_BRIDGE_RECONNECT_MAX_MS = "$ReconnectMaxDelayMs"
+$env:MSFS_BRIDGE_SIMCONNECT_MODE = "$SimConnectMode"
+$env:MSFS_BRIDGE_SIMCONNECT_WORKER_ARGS = "$SimConnectWorkerArgs"
+if (-not [string]::IsNullOrWhiteSpace($SimConnectWorkerPath)) {
+  $env:MSFS_BRIDGE_SIMCONNECT_WORKER_PATH = "$SimConnectWorkerPath"
+}
+elseif ($SimConnectMode -eq "worker") {
+  $env:MSFS_BRIDGE_SIMCONNECT_WORKER_PATH = (Join-Path $PSScriptRoot 'workers\simconnect-native\dist\msfs-simconnect-worker.exe')
+}
 
 $safeCertBase = Get-SafeCertBaseName -Domain $LocalDomain
 $certRoot = Resolve-PathUnderRoot -Root $PSScriptRoot -PathValue $CertDir
@@ -157,7 +169,8 @@ $wssReady = $false
 $wssUsesPfx = $false
 $lanIps = @(Get-PrivateLanIPv4)
 $bootstrapHostIp = if ($lanIps.Count -gt 0) { $lanIps[0] } else { "" }
-$wssConnectHost = if (-not [string]::IsNullOrWhiteSpace($bootstrapHostIp)) { $bootstrapHostIp } else { $LocalDomain }
+$wssPublicHost = $LocalDomain
+$wssDirectIpHost = $bootstrapHostIp
 
 if ($wssRequested) {
   if (Test-Path $pfxPath) {
@@ -166,6 +179,7 @@ if ($wssRequested) {
   }
   elseif ((Test-Path $certPath) -and (Test-Path $keyPath)) {
     $wssReady = $true
+    $wssUsesPfx = $false
   }
   elseif ($RequireWss) {
     throw "WSS is required but certificate files are missing. Expected pfx='$pfxPath' or cert='$certPath', key='$keyPath'. Run .\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain"
@@ -174,14 +188,14 @@ if ($wssRequested) {
   if (-not $wssReady) {
     Write-Host "[WARN] WSS certificate files are missing; starting in WS-only mode." -ForegroundColor Yellow
     Write-Host "[HINT] Generate certs:" -ForegroundColor Yellow
-    Write-Host "  .\\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`"" -ForegroundColor Yellow
+    Write-Host "  .\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`"" -ForegroundColor Yellow
   }
 }
 
 $env:MSFS_BRIDGE_WSS_ENABLED = if ($wssReady) { "true" } else { "false" }
 $env:MSFS_BRIDGE_WSS_BIND = "$BindHost"
 $env:MSFS_BRIDGE_WSS_PORT = "$WssPort"
-$env:MSFS_BRIDGE_PUBLIC_WSS_HOST = "$wssConnectHost"
+$env:MSFS_BRIDGE_PUBLIC_WSS_HOST = "$wssPublicHost"
 $env:MSFS_BRIDGE_TLS_CERT_PATH = "$certPath"
 $env:MSFS_BRIDGE_TLS_KEY_PATH = "$keyPath"
 $env:MSFS_BRIDGE_TLS_PFX_PATH = if ($wssUsesPfx) { "$pfxPath" } else { "" }
@@ -202,13 +216,20 @@ else {
 }
 
 Write-Host "Starting MSFS Local Bridge..."
+Write-Host "  simconnect mode: $SimConnectMode"
+if ($SimConnectMode -eq "worker" -and -not [string]::IsNullOrWhiteSpace($SimConnectWorkerPath)) {
+  Write-Host "  worker path: $SimConnectWorkerPath"
+}
 Write-Host "  bind:   ws://$BindHost`:$Port$StreamPath"
 Write-Host "  local:  ws://127.0.0.1`:$Port$StreamPath"
 if ($wssReady) {
-  Write-Host "  secure: wss://$wssConnectHost`:$WssPort$StreamPath"
+  Write-Host "  secure: wss://$wssPublicHost`:$WssPort$StreamPath"
+  if (-not [string]::IsNullOrWhiteSpace($wssDirectIpHost) -and $wssDirectIpHost -ne $wssPublicHost) {
+    Write-Host "  direct secure (IP SAN): wss://$wssDirectIpHost`:$WssPort$StreamPath"
+  }
   Write-Host "  secure cert mode: $(if ($wssUsesPfx) { 'pfx' } else { 'pem' })"
-  if ($wssConnectHost -ne $LocalDomain) {
-    Write-Host "  fallback secure (hosts mapping required): wss://$LocalDomain`:$WssPort$StreamPath"
+  if (-not [string]::IsNullOrWhiteSpace($wssDirectIpHost) -and $wssDirectIpHost -ne $wssPublicHost) {
+    Write-Host "  hosts-mapped secure target: wss://$wssPublicHost`:$WssPort$StreamPath"
   }
 }
 
@@ -225,7 +246,7 @@ if (-not $SkipLanHints) {
     Write-Host "  Quick open from Mac browser:"
     Write-Host "    http://localhost:3000/?msfsBridgeUrl=$encodedPreferredUrl"
     if ($wssReady) {
-      $secureUrl = "wss://$wssConnectHost`:$WssPort$StreamPath"
+      $secureUrl = "wss://$wssPublicHost`:$WssPort$StreamPath"
       $encodedSecureUrl = [System.Uri]::EscapeDataString($secureUrl)
       Write-Host "  Quick open on anobservatory.com:"
       Write-Host "    https://anobservatory.com/?msfsBridgeUrl=$encodedSecureUrl"
@@ -248,7 +269,7 @@ if (-not $SkipLanHints) {
   else {
     Write-Host "  [WARN] Managed firewall rule is not present for TCP $Port." -ForegroundColor Yellow
     Write-Host "  [HINT] If another device cannot connect, run (Admin):" -ForegroundColor Yellow
-    Write-Host "    .\\repair-elevated-v0.ps1 -Action OpenFirewall39000 -Port $Port" -ForegroundColor Yellow
+    Write-Host "    .\repair-elevated-v0.ps1 -Action OpenFirewall39000 -Port $Port" -ForegroundColor Yellow
   }
 
   if ($wssReady) {
@@ -258,7 +279,7 @@ if (-not $SkipLanHints) {
     else {
       Write-Host "  [WARN] Managed firewall rule is not present for TCP $WssPort." -ForegroundColor Yellow
       Write-Host "  [HINT] If WSS clients cannot connect, run (Admin):" -ForegroundColor Yellow
-      Write-Host "    .\\repair-elevated-v0.ps1 -Action OpenFirewall39002 -Port $WssPort" -ForegroundColor Yellow
+      Write-Host "    .\repair-elevated-v0.ps1 -Action OpenFirewall39002 -Port $WssPort" -ForegroundColor Yellow
     }
   }
 }
@@ -289,7 +310,3 @@ if (Test-Path $dllPath) {
 }
 
 throw "No runnable bridge target found. Expected one of: MsfsLocalBridge.exe, MsfsLocalBridge.csproj, MsfsLocalBridge.dll"
-
-
-
-

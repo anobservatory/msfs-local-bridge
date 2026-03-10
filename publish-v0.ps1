@@ -76,6 +76,13 @@ New-Item -ItemType Directory -Path $packageLibDir -Force | Out-Null
 Copy-Item $managedDll (Join-Path $packageLibDir "Microsoft.FlightSimulator.SimConnect.dll") -Force
 Copy-Item $nativeDll (Join-Path $packageLibDir "SimConnect.dll") -Force
 
+$workerDistDir = Join-Path $projectRoot "workers\simconnect-native\dist"
+if (Test-Path $workerDistDir) {
+  $packageWorkerDir = Join-Path $packageRoot "workers\simconnect-native\dist"
+  New-Item -ItemType Directory -Path $packageWorkerDir -Force | Out-Null
+  Copy-Item (Join-Path $workerDistDir "*") $packageWorkerDir -Recurse -Force
+}
+
 Compress-Archive -Path "$packageRoot\*" -DestinationPath $zipPath -Force
 
 Write-Host ""
@@ -87,3 +94,4 @@ Write-Host "  1) Extract zip"
 Write-Host "  2) Run .\preflight-v0.ps1"
 Write-Host "  3) Run .\run-bridge.ps1"
 Write-Host "  4) Confirm netstat -ano | findstr "":39000"""
+

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net;
 using System.Net.WebSockets;
 using System.Reflection;
@@ -21,7 +21,14 @@ builder.Logging.AddSimpleConsole(options =>
 
 builder.Services.AddSingleton(bridgeOptions);
 builder.Services.AddSingleton<OwnshipSnapshotStore>();
-builder.Services.AddHostedService<SimConnectOwnshipService>();
+if (bridgeOptions.UseWorkerSimConnect)
+{
+  builder.Services.AddHostedService<SimConnectWorkerOwnshipService>();
+}
+else
+{
+  builder.Services.AddHostedService<SimConnectOwnshipService>();
+}
 
 if (bridgeOptions.WssEnabled)
 {
@@ -59,6 +66,8 @@ app.MapGet("/", (BridgeOptions options) => Results.Json(new
   status = "ok",
   streamPath = options.StreamPath,
   sampleIntervalMs = options.SampleIntervalMs,
+  simConnectMode = options.SimConnectMode,
+  simConnectWorkerPath = options.UseWorkerSimConnect ? options.SimConnectWorkerExecutablePath : null,
   wssEnabled = options.WssEnabled,
   wssHost = options.WssEnabled ? options.WssPublicHost : null,
   wssPort = options.WssEnabled ? options.WssPort : (int?)null,
@@ -331,6 +340,14 @@ app.Map(bridgeOptions.StreamPath, async (
 
 app.Lifetime.ApplicationStarted.Register(() =>
 {
+  app.Logger.LogInformation("SimConnect ingestion mode: {Mode}", bridgeOptions.SimConnectMode);
+  if (bridgeOptions.UseWorkerSimConnect)
+  {
+    app.Logger.LogInformation(
+      "SimConnect worker path: {WorkerPath}",
+      bridgeOptions.SimConnectWorkerExecutablePath
+    );
+  }
   app.Logger.LogInformation(
     "MSFS bridge listening at ws://{BindHost}:{Port}{Path}",
     bridgeOptions.BindHost,
@@ -377,6 +394,13 @@ static bool IsSimConnectLoadFailure(FileNotFoundException ex)
   return fileName.Contains("Microsoft.FlightSimulator.SimConnect.dll", StringComparison.OrdinalIgnoreCase);
 }
 
+static X509KeyStorageFlags GetTlsCertificateKeyStorageFlags()
+{
+  return OperatingSystem.IsWindows()
+    ? X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable
+    : X509KeyStorageFlags.Exportable;
+}
+
 static X509Certificate2 LoadWssCertificate(BridgeOptions options)
 {
   if (options.HasPfxCertificate)
@@ -392,7 +416,7 @@ static X509Certificate2 LoadWssCertificate(BridgeOptions options)
 
     try
     {
-      return new X509Certificate2(pfxPath, options.TlsPfxPassword);
+      return X509CertificateLoader.LoadPkcs12FromFile(pfxPath, options.TlsPfxPassword, GetTlsCertificateKeyStorageFlags(), null);
     }
     catch (Exception ex)
     {
@@ -425,8 +449,9 @@ static X509Certificate2 LoadWssCertificate(BridgeOptions options)
   try
   {
     // Kestrel expects a certificate with private key. PEM loading is normalized via PKCS#12 re-wrap.
-    var pem = X509Certificate2.CreateFromPemFile(certPath, keyPath);
-    return new X509Certificate2(pem.Export(X509ContentType.Pkcs12));
+    using var pem = X509Certificate2.CreateFromPemFile(certPath, keyPath);
+    var pkcs12 = pem.Export(X509ContentType.Pkcs12, string.Empty);
+    return X509CertificateLoader.LoadPkcs12(pkcs12, string.Empty, GetTlsCertificateKeyStorageFlags(), null);
   }
   catch (Exception ex)
   {
@@ -641,6 +666,10 @@ internal sealed class BridgeOptions
   public string CompanionVersion { get; }
   public string SimPlatform { get; }
   public string SimVersionFallback { get; }
+  public string SimConnectMode { get; }
+  public string SimConnectWorkerExecutablePath { get; }
+  public string SimConnectWorkerArguments { get; }
+  public bool UseWorkerSimConnect => string.Equals(SimConnectMode, "worker", StringComparison.OrdinalIgnoreCase);
 
   private BridgeOptions(
     string bindHost,
@@ -666,7 +695,10 @@ internal sealed class BridgeOptions
     string deviceId,
     string companionVersion,
     string simPlatform,
-    string simVersionFallback
+    string simVersionFallback,
+    string simConnectMode,
+    string simConnectWorkerExecutablePath,
+    string simConnectWorkerArguments
   )
   {
     BindHost = bindHost;
@@ -693,6 +725,9 @@ internal sealed class BridgeOptions
     CompanionVersion = companionVersion;
     SimPlatform = simPlatform;
     SimVersionFallback = simVersionFallback;
+    SimConnectMode = simConnectMode;
+    SimConnectWorkerExecutablePath = simConnectWorkerExecutablePath;
+    SimConnectWorkerArguments = simConnectWorkerArguments;
   }
 
   public static BridgeOptions FromEnvironment()
@@ -721,6 +756,12 @@ internal sealed class BridgeOptions
     var companionVersion = ReadString("MSFS_BRIDGE_COMPANION_VERSION", ResolveCompanionVersion());
     var simPlatform = ReadString("MSFS_BRIDGE_SIM_PLATFORM", "msfs").ToLowerInvariant();
     var simVersionFallback = ReadString("MSFS_BRIDGE_SIM_VERSION_FALLBACK", "Local Bridge");
+    var simConnectMode = ReadSimConnectMode("MSFS_BRIDGE_SIMCONNECT_MODE", "embedded");
+    var simConnectWorkerExecutablePath = ReadString(
+      "MSFS_BRIDGE_SIMCONNECT_WORKER_PATH",
+      Path.Combine("workers", "simconnect-native", "dist", "msfs-simconnect-worker.exe")
+    );
+    var simConnectWorkerArguments = ReadString("MSFS_BRIDGE_SIMCONNECT_WORKER_ARGS", "--stdio-json");
     var deviceId = NormalizeDeviceId(deviceName);
 
     return new BridgeOptions(
@@ -747,7 +788,10 @@ internal sealed class BridgeOptions
       deviceId: deviceId,
       companionVersion: companionVersion,
       simPlatform: simPlatform,
-      simVersionFallback: simVersionFallback
+      simVersionFallback: simVersionFallback,
+      simConnectMode: simConnectMode,
+      simConnectWorkerExecutablePath: simConnectWorkerExecutablePath,
+      simConnectWorkerArguments: simConnectWorkerArguments
     );
   }
 
@@ -800,6 +844,17 @@ internal sealed class BridgeOptions
     }
 
     return Math.Clamp(parsed, min, max);
+  }
+
+  private static string ReadSimConnectMode(string name, string fallback)
+  {
+    var mode = ReadString(name, fallback).Trim().ToLowerInvariant();
+    return mode switch
+    {
+      "embedded" => "embedded",
+      "worker" => "worker",
+      _ => fallback,
+    };
   }
 
   private static string NormalizePath(string path)
@@ -1416,4 +1471,17 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     public int TransponderCode;
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
