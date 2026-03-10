@@ -1,4 +1,4 @@
-param(
+﻿param(
   [int]$Port = 39000,
   [int]$WssPort = 39002,
   [string]$LocalDomain = "ao.home.arpa",
@@ -150,46 +150,6 @@ function Get-SafeCertBaseName {
   return ($Domain -replace '[^a-zA-Z0-9._-]', '_')
 }
 
-function Find-MkcertPath {
-  $command = Get-Command mkcert -ErrorAction SilentlyContinue
-  if ($null -ne $command -and $command.Source -and (Test-Path $command.Source)) {
-    return [System.IO.Path]::GetFullPath($command.Source)
-  }
-
-  $candidatePaths = @(
-    (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\mkcert.exe"),
-    (Join-Path $env:ProgramData "chocolatey\bin\mkcert.exe"),
-    (Join-Path $env:ProgramFiles "mkcert\mkcert.exe"),
-    (Join-Path $env:ProgramFiles "mkcert\bin\mkcert.exe")
-  )
-
-  $programFilesX86 = ${env:ProgramFiles(x86)}
-  if ($programFilesX86) {
-    $candidatePaths += (Join-Path $programFilesX86 "mkcert\mkcert.exe")
-    $candidatePaths += (Join-Path $programFilesX86 "mkcert\bin\mkcert.exe")
-  }
-
-  foreach ($candidate in ($candidatePaths | Where-Object { $_ } | Select-Object -Unique)) {
-    if (Test-Path $candidate) {
-      return [System.IO.Path]::GetFullPath($candidate)
-    }
-  }
-
-  try {
-    $whereMatches = @(& where.exe mkcert 2>$null)
-    foreach ($match in $whereMatches) {
-      if ($match -and (Test-Path $match.Trim())) {
-        return [System.IO.Path]::GetFullPath($match.Trim())
-      }
-    }
-  }
-  catch {
-    # Ignore where.exe failures.
-  }
-
-  return $null
-}
-
 function Write-TextCheck {
   param(
     [string]$Status,
@@ -259,7 +219,7 @@ if ($releaseLayout) {
 }
 else {
   if ($null -eq $dotnet) {
-    Add-Check -Id "runtime.dotnet" -Status "fail" -Message "dotnet SDK not found (required for source layout)" -RepairAction "Install .NET 8 SDK or use release zip."
+    Add-Check -Id "runtime.dotnet" -Status "fail" -Message "dotnet SDK not found (required for source layout)" -RepairAction "Install the required .NET SDK/runtime or use the packaged app build."
   }
   else {
     Add-Check -Id "runtime.dotnet" -Status "pass" -Message "dotnet found: $($dotnet.Source)"
@@ -363,10 +323,21 @@ $safeCertBase = Get-SafeCertBaseName -Domain $LocalDomain
 $certRoot = Resolve-PathUnderRoot -Root $projectRoot -PathValue $CertDir
 $certPath = Join-Path $certRoot "$safeCertBase.pem"
 $keyPath = Join-Path $certRoot "$safeCertBase-key.pem"
+$pfxPath = Join-Path $certRoot "$safeCertBase.p12"
 $rootCaPath = Join-Path $certRoot "rootCA.pem"
+
+if (Test-Path $pfxPath) {
+  Add-Check -Id "network.wss_pfx" -Status "pass" -Message "WSS PKCS#12 bundle found: $pfxPath"
+}
+else {
+  Add-Check -Id "network.wss_pfx" -Status "warn" -Message "WSS PKCS#12 bundle missing: $pfxPath" -RepairAction "Run: .\\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`""
+}
 
 if (Test-Path $certPath) {
   Add-Check -Id "network.wss_cert" -Status "pass" -Message "WSS certificate found: $certPath"
+}
+elseif (Test-Path $pfxPath) {
+  Add-Check -Id "network.wss_cert" -Status "pass" -Message "WSS PEM certificate not required because PKCS#12 bundle exists: $pfxPath"
 }
 else {
   Add-Check -Id "network.wss_cert" -Status "warn" -Message "WSS certificate missing: $certPath" -RepairAction "Run: .\\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`""
@@ -374,6 +345,9 @@ else {
 
 if (Test-Path $keyPath) {
   Add-Check -Id "network.wss_key" -Status "pass" -Message "WSS key found: $keyPath"
+}
+elseif (Test-Path $pfxPath) {
+  Add-Check -Id "network.wss_key" -Status "pass" -Message "WSS PEM private key not required because PKCS#12 bundle exists: $pfxPath"
 }
 else {
   Add-Check -Id "network.wss_key" -Status "warn" -Message "WSS key missing: $keyPath" -RepairAction "Run: .\\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`""
@@ -385,15 +359,6 @@ if (Test-Path $rootCaPath) {
 else {
   Add-Check -Id "network.root_ca" -Status "warn" -Message "Root CA export missing: $rootCaPath" -RepairAction "Run: .\\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`""
 }
-
-$mkcertPath = Find-MkcertPath
-if ($null -ne $mkcertPath) {
-  Add-Check -Id "network.mkcert" -Status "pass" -Message "mkcert found: $mkcertPath"
-}
-else {
-  Add-Check -Id "network.mkcert" -Status "warn" -Message "mkcert executable not found" -RepairAction "Install mkcert and rerun certificate setup script."
-}
-
 $portLines = @(netstat -ano | Select-String ":$Port")
 $listeningLines = @($portLines | Where-Object { $_.Line -match "LISTENING" })
 if ($listeningLines.Count -eq 0) {
@@ -499,3 +464,5 @@ if ($failCount -gt 0) {
 }
 
 exit 0
+
+

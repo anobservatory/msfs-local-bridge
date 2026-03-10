@@ -3,3 +3,6 @@ obj/
 apps/.DS_Store
 .DS_Store
 *.pem
+*.p12
+workers/simconnect-native/build/
+workers/simconnect-native/dist/

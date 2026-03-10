@@ -1,4 +1,4 @@
-param(
+﻿param(
   [int]$Port = 39000,
   [int]$WssPort = 39002,
   [string]$LocalDomain = "ao.home.arpa",
@@ -111,7 +111,6 @@ function Get-PrivateLanIPv4 {
     }
   }
   catch {
-    # Fallback probe below.
   }
 
   try {
@@ -127,16 +126,13 @@ function Get-PrivateLanIPv4 {
     }
   }
   catch {
-    # Fallback below if Get-NetIPAddress is unavailable.
   }
 
   if ($ordered.Count -eq 0) {
     try {
       $hostName = [System.Net.Dns]::GetHostName()
       $dnsIps = @([System.Net.Dns]::GetHostAddresses($hostName) |
-        Where-Object {
-          $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork
-        } |
+        Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } |
         ForEach-Object { $_.IPAddressToString })
 
       foreach ($ip in $dnsIps) {
@@ -144,7 +140,6 @@ function Get-PrivateLanIPv4 {
       }
     }
     catch {
-      # Ignore DNS lookup failures.
     }
   }
 
@@ -169,46 +164,6 @@ function Get-SafeCertBaseName {
   return ($Domain -replace '[^a-zA-Z0-9._-]', '_')
 }
 
-function Find-MkcertPath {
-  $command = Get-Command mkcert -ErrorAction SilentlyContinue
-  if ($null -ne $command -and $command.Source -and (Test-Path $command.Source)) {
-    return [System.IO.Path]::GetFullPath($command.Source)
-  }
-
-  $candidatePaths = @(
-    (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\mkcert.exe"),
-    (Join-Path $env:ProgramData "chocolatey\bin\mkcert.exe"),
-    (Join-Path $env:ProgramFiles "mkcert\mkcert.exe"),
-    (Join-Path $env:ProgramFiles "mkcert\bin\mkcert.exe")
-  )
-
-  $programFilesX86 = ${env:ProgramFiles(x86)}
-  if ($programFilesX86) {
-    $candidatePaths += (Join-Path $programFilesX86 "mkcert\mkcert.exe")
-    $candidatePaths += (Join-Path $programFilesX86 "mkcert\bin\mkcert.exe")
-  }
-
-  foreach ($candidate in ($candidatePaths | Where-Object { $_ } | Select-Object -Unique)) {
-    if (Test-Path $candidate) {
-      return [System.IO.Path]::GetFullPath($candidate)
-    }
-  }
-
-  try {
-    $whereMatches = @(& where.exe mkcert 2>$null)
-    foreach ($match in $whereMatches) {
-      if ($match -and (Test-Path $match.Trim())) {
-        return [System.IO.Path]::GetFullPath($match.Trim())
-      }
-    }
-  }
-  catch {
-    # Ignore where.exe failures.
-  }
-
-  return $null
-}
-
 function Test-PortAvailability {
   param([int]$RulePort)
 
@@ -231,10 +186,9 @@ function Test-PortAvailability {
       continue
     }
 
-    $pid = $parsedPid
-    $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
+    $process = Get-Process -Id $parsedPid -ErrorAction SilentlyContinue
     if ($null -eq $process) {
-      Write-Check -Status WARN -Message "TCP $RulePort in use by PID $pid (process not found)"
+      Write-Check -Status WARN -Message "TCP $RulePort in use by PID $parsedPid (process not found)"
       continue
     }
 
@@ -242,7 +196,7 @@ function Test-PortAvailability {
       Write-Check -Status WARN -Message "TCP $RulePort in use by node.exe (likely mock sender)"
     }
     else {
-      Write-Check -Status WARN -Message "TCP $RulePort already in use by $($process.ProcessName).exe (PID $pid)"
+      Write-Check -Status WARN -Message "TCP $RulePort already in use by $($process.ProcessName).exe (PID $parsedPid)"
     }
   }
 }
@@ -264,10 +218,10 @@ $releaseLayout = (Test-Path $releaseExe) -and (-not (Test-Path $projectFile))
 $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
 if ($releaseLayout) {
   if ($null -eq $dotnet) {
-    Write-Check -Status PASS -Message "dotnet not found (expected for self-contained release usage)"
+    Write-Check -Status PASS -Message "dotnet not found (expected for packaged release usage)"
   }
   else {
-    Write-Check -Status PASS -Message "dotnet found (optional for self-contained release): $($dotnet.Source)"
+    Write-Check -Status PASS -Message "dotnet found (optional for packaged release): $($dotnet.Source)"
   }
 }
 else {
@@ -287,6 +241,8 @@ if ($releaseLayout) {
 }
 
 $outputRoots = @(
+  (Join-Path $PSScriptRoot "bin\Debug\net10.0-windows\win-x64"),
+  (Join-Path $PSScriptRoot "bin\Release\net10.0-windows\win-x64"),
   (Join-Path $PSScriptRoot "bin\Debug\net8.0-windows\win-x64"),
   (Join-Path $PSScriptRoot "bin\Release\net8.0-windows\win-x64")
 )
@@ -410,10 +366,21 @@ $safeCertBase = Get-SafeCertBaseName -Domain $LocalDomain
 $certRoot = Resolve-PathUnderRoot -Root $PSScriptRoot -PathValue $CertDir
 $certPath = Join-Path $certRoot "$safeCertBase.pem"
 $keyPath = Join-Path $certRoot "$safeCertBase-key.pem"
+$pfxPath = Join-Path $certRoot "$safeCertBase.p12"
 $rootCaPath = Join-Path $certRoot "rootCA.pem"
+
+if (Test-Path $pfxPath) {
+  Write-Check -Status PASS -Message "WSS PKCS#12 bundle found: $pfxPath"
+}
+else {
+  Write-Check -Status WARN -Message "WSS PKCS#12 bundle missing: $pfxPath"
+}
 
 if (Test-Path $certPath) {
   Write-Check -Status PASS -Message "WSS certificate found: $certPath"
+}
+elseif (Test-Path $pfxPath) {
+  Write-Check -Status PASS -Message "WSS PEM certificate not required because PKCS#12 bundle exists: $pfxPath"
 }
 else {
   Write-Check -Status WARN -Message "WSS certificate missing: $certPath"
@@ -421,6 +388,9 @@ else {
 
 if (Test-Path $keyPath) {
   Write-Check -Status PASS -Message "WSS key found: $keyPath"
+}
+elseif (Test-Path $pfxPath) {
+  Write-Check -Status PASS -Message "WSS PEM private key not required because PKCS#12 bundle exists: $pfxPath"
 }
 else {
   Write-Check -Status WARN -Message "WSS key missing: $keyPath"
@@ -431,16 +401,6 @@ if (Test-Path $rootCaPath) {
 }
 else {
   Write-Check -Status WARN -Message "Root CA export missing: $rootCaPath (listener bootstrap scripts may fail)"
-}
-
-$mkcertPath = Find-MkcertPath
-if ($null -ne $mkcertPath) {
-  Write-Check -Status PASS -Message "mkcert found: $mkcertPath"
-}
-else {
-  Write-Check -Status WARN -Message "mkcert not found (needed for first-time WSS certificate setup)"
-  Write-Host "  -> Repair: Install mkcert then run:"
-  Write-Host "     .\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`""
 }
 
 Test-PortAvailability -RulePort $Port
@@ -459,7 +419,7 @@ if ($script:FailCount -gt 0) {
 }
 else {
   Write-Host "No blocking issues found. Next step:" -ForegroundColor Green
-  Write-Host "  .\\run-bridge.ps1"
+  Write-Host "  .\run-bridge.ps1"
 }
 
 if ($Strict -and $script:FailCount -gt 0) {
