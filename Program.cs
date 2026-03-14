@@ -86,12 +86,12 @@ if (bridgeOptions.BootstrapEnabled)
   var bootstrapBasePath = bridgeOptions.BootstrapPath;
   var bootstrapBaseUrl = BuildBootstrapBaseUrl(bridgeOptions);
   var caRoute = $"{bootstrapBasePath}/ca/rootCA.pem";
-  var wssHostForClient = SelectWssHostForClient(bridgeOptions);
-  var wssClientUrl = bridgeOptions.WssEnabled
-    ? $"wss://{wssHostForClient}:{bridgeOptions.WssPort}{bridgeOptions.StreamPath}"
+  var wssHostForBootstrapClient = SelectWssHostForBootstrapClient(bridgeOptions);
+  var wssBootstrapClientUrl = bridgeOptions.WssEnabled
+    ? $"wss://{wssHostForBootstrapClient}:{bridgeOptions.WssPort}{bridgeOptions.StreamPath}"
     : string.Empty;
   var aoConnectUrl = bridgeOptions.WssEnabled
-    ? $"https://anobservatory.com/?msfsBridgeUrl={Uri.EscapeDataString(wssClientUrl)}"
+    ? $"https://anobservatory.com/?msfsBridgeUrl={Uri.EscapeDataString(wssBootstrapClientUrl)}"
     : string.Empty;
 
   app.MapGet(bootstrapBasePath, (ILoggerFactory loggerFactory) =>
@@ -100,7 +100,7 @@ if (bridgeOptions.BootstrapEnabled)
     {
       var html = BuildBootstrapHtml(
         bootstrapBaseUrl: bootstrapBaseUrl,
-        wssClientUrl: wssClientUrl,
+        wssClientUrl: wssBootstrapClientUrl,
         aoConnectUrl: aoConnectUrl,
         wssEnabled: bridgeOptions.WssEnabled
       );
@@ -122,7 +122,7 @@ if (bridgeOptions.BootstrapEnabled)
       {
         var fallback = BuildBootstrapFallbackText(
           bootstrapBaseUrl: bootstrapBaseUrl,
-          wssClientUrl: wssClientUrl,
+          wssClientUrl: wssBootstrapClientUrl,
           aoConnectUrl: aoConnectUrl,
           wssEnabled: bridgeOptions.WssEnabled
         );
@@ -150,7 +150,7 @@ if (bridgeOptions.BootstrapEnabled)
     status = "ok",
     bootstrapBaseUrl,
     wssEnabled = bridgeOptions.WssEnabled,
-    wssBridgeUrl = bridgeOptions.WssEnabled ? wssClientUrl : null,
+    wssBridgeUrl = bridgeOptions.WssEnabled ? wssBootstrapClientUrl : null,
     aoConnectUrl = bridgeOptions.WssEnabled ? aoConnectUrl : null,
     localDomain = bridgeOptions.WssPublicHost,
     hostIp = bridgeOptions.BootstrapHostIp,
@@ -479,16 +479,16 @@ static string BuildBootstrapBaseUrl(BridgeOptions options)
   return $"http://{host}:{options.Port}{options.BootstrapPath}";
 }
 
-static string SelectWssHostForClient(BridgeOptions options)
+static string SelectWssHostForBootstrapClient(BridgeOptions options)
 {
-  if (!string.IsNullOrWhiteSpace(options.WssPublicHost))
-  {
-    return options.WssPublicHost;
-  }
-
   if (!string.IsNullOrWhiteSpace(options.BootstrapHostIp))
   {
     return options.BootstrapHostIp;
+  }
+
+  if (!string.IsNullOrWhiteSpace(options.WssPublicHost))
+  {
+    return options.WssPublicHost;
   }
 
   return options.BindHost;
