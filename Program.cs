@@ -21,6 +21,8 @@ builder.Logging.AddSimpleConsole(options =>
 
 builder.Services.AddSingleton(bridgeOptions);
 builder.Services.AddSingleton<OwnshipSnapshotStore>();
+builder.Services.AddSingleton<RouteDiagnosticsState>();
+builder.Services.AddHostedService<CustomFlightRouteService>();
 if (bridgeOptions.UseWorkerSimConnect)
 {
   builder.Services.AddHostedService<SimConnectWorkerOwnshipService>();
@@ -60,7 +62,7 @@ app.UseWebSockets(new WebSocketOptions
   KeepAliveInterval = TimeSpan.FromSeconds(15),
 });
 
-app.MapGet("/", (BridgeOptions options) => Results.Json(new
+app.MapGet("/", (BridgeOptions options, OwnshipSnapshotStore snapshotStore, RouteDiagnosticsState routeDiagnostics) => Results.Json(new
 {
   name = "msfs-local-bridge",
   status = "ok",
@@ -79,6 +81,27 @@ app.MapGet("/", (BridgeOptions options) => Results.Json(new
   bootstrapPath = options.BootstrapEnabled ? options.BootstrapPath : null,
   bootstrapUrl = options.BootstrapEnabled ? BuildBootstrapBaseUrl(options) : null,
   bootstrapCaPath = options.BootstrapEnabled ? options.BootstrapCaPath : null,
+  routeDiagnostics = new
+  {
+    provider = routeDiagnostics.Provider,
+    supported = routeDiagnostics.Supported,
+    requestActive = routeDiagnostics.RequestActive,
+    lastRouteUpdateAtMs = routeDiagnostics.LastRouteUpdateAtMs,
+    originAirportId = routeDiagnostics.OriginAirportId,
+    destinationAirportId = routeDiagnostics.DestinationAirportId,
+    lastError = routeDiagnostics.LastError,
+  },
+  ownshipRoute = snapshotStore.TryRead(out var snapshot)
+    ? new
+    {
+      originAirportId = snapshot.OriginAirportId ?? routeDiagnostics.OriginAirportId,
+      destinationAirportId = snapshot.DestinationAirportId ?? routeDiagnostics.DestinationAirportId,
+    }
+    : new
+    {
+      originAirportId = routeDiagnostics.OriginAirportId,
+      destinationAirportId = routeDiagnostics.DestinationAirportId,
+    },
 }));
 
 if (bridgeOptions.BootstrapEnabled)
@@ -202,6 +225,7 @@ if (bridgeOptions.BootstrapEnabled)
 app.Map(bridgeOptions.StreamPath, async (
   HttpContext context,
   OwnshipSnapshotStore snapshotStore,
+  RouteDiagnosticsState routeDiagnostics,
   BridgeOptions options,
   ILoggerFactory loggerFactory
 ) =>
@@ -228,6 +252,8 @@ app.Map(bridgeOptions.StreamPath, async (
       if (snapshotStore.TryRead(out var snapshot))
       {
         waitingTelemetryLoggedAt = null;
+        var originAirportId = snapshot.OriginAirportId ?? routeDiagnostics.OriginAirportId;
+        var destinationAirportId = snapshot.DestinationAirportId ?? routeDiagnostics.DestinationAirportId;
         var payload = new
         {
           source = "msfs_local",
@@ -252,6 +278,8 @@ app.Map(bridgeOptions.StreamPath, async (
             callsign = snapshot.Callsign,
             tailNumber = snapshot.TailNumber,
             aircraftTitle = snapshot.AircraftTitle,
+            originAirportId,
+            destinationAirportId,
             squawk = snapshot.Squawk,
             lat = snapshot.Lat,
             lon = snapshot.Lon,
@@ -917,6 +945,8 @@ internal readonly record struct OwnshipSnapshot(
   string? Callsign,
   string? TailNumber,
   string? AircraftTitle,
+  string? OriginAirportId,
+  string? DestinationAirportId,
   string? Squawk,
   string SimVersionLabel,
   double Lat,
@@ -931,16 +961,31 @@ internal readonly record struct OwnshipSnapshot(
   long TimestampMs
 );
 
+internal enum RouteDataSource
+{
+  None = 0,
+  CustomFlightFile = 1,
+  ExternalSimConnect = 2,
+  WorkerStream = 2,
+}
+
 internal sealed class OwnshipSnapshotStore
 {
   private readonly object _gate = new();
   private OwnshipSnapshot? _latest;
+  private string? _originAirportId;
+  private string? _destinationAirportId;
+  private RouteDataSource _routeDataSource = RouteDataSource.None;
 
   public void Write(OwnshipSnapshot snapshot)
   {
     lock (_gate)
     {
-      _latest = snapshot;
+      _latest = snapshot with
+      {
+        OriginAirportId = _originAirportId,
+        DestinationAirportId = _destinationAirportId,
+      };
     }
   }
 
@@ -964,6 +1009,108 @@ internal sealed class OwnshipSnapshotStore
     lock (_gate)
     {
       _latest = null;
+      _originAirportId = null;
+      _destinationAirportId = null;
+      _routeDataSource = RouteDataSource.None;
+    }
+  }
+
+  public bool UpdateRoute(string? originAirportId, string? destinationAirportId, RouteDataSource source)
+  {
+    lock (_gate)
+    {
+      var hasCandidate = !string.IsNullOrWhiteSpace(originAirportId) || !string.IsNullOrWhiteSpace(destinationAirportId);
+      var hasCurrent = !string.IsNullOrWhiteSpace(_originAirportId) || !string.IsNullOrWhiteSpace(_destinationAirportId);
+
+      if (source < _routeDataSource && hasCurrent)
+      {
+        return false;
+      }
+
+      if (!hasCandidate && source > _routeDataSource && hasCurrent)
+      {
+        return false;
+      }
+
+      _routeDataSource = hasCandidate || !hasCurrent
+        ? source
+        : _routeDataSource;
+      _originAirportId = originAirportId;
+      _destinationAirportId = destinationAirportId;
+
+      if (_latest is OwnshipSnapshot latest)
+      {
+        _latest = latest with
+        {
+          OriginAirportId = originAirportId,
+          DestinationAirportId = destinationAirportId,
+        };
+      }
+
+      return true;
+    }
+  }
+}
+
+internal sealed class RouteDiagnosticsState
+{
+  private readonly object _gate = new();
+
+  public string? Provider { get; private set; }
+  public bool? Supported { get; private set; }
+  public bool RequestActive { get; private set; }
+  public long? LastRouteUpdateAtMs { get; private set; }
+  public string? OriginAirportId { get; private set; }
+  public string? DestinationAirportId { get; private set; }
+  public string? LastError { get; private set; }
+
+  public void SetProvider(string provider)
+  {
+    lock (_gate)
+    {
+      Provider = provider;
+    }
+  }
+
+  public void SetSupported(bool supported, string? error = null)
+  {
+    lock (_gate)
+    {
+      Supported = supported;
+      LastError = error;
+      if (!supported)
+      {
+        RequestActive = false;
+      }
+    }
+  }
+
+  public void SetRequestActive(bool requestActive)
+  {
+    lock (_gate)
+    {
+      RequestActive = requestActive;
+    }
+  }
+
+  public void UpdateRoute(string? originAirportId, string? destinationAirportId)
+  {
+    lock (_gate)
+    {
+      OriginAirportId = originAirportId;
+      DestinationAirportId = destinationAirportId;
+      LastRouteUpdateAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+    }
+  }
+
+  public void ClearRoute()
+  {
+    lock (_gate)
+    {
+      RequestActive = false;
+      OriginAirportId = null;
+      DestinationAirportId = null;
+      LastRouteUpdateAtMs = null;
     }
   }
 }
@@ -973,11 +1120,14 @@ internal sealed class SimConnectOwnshipService : BackgroundService
   private readonly object _gate = new();
   private readonly ILogger<SimConnectOwnshipService> _logger;
   private readonly OwnshipSnapshotStore _snapshotStore;
+  private readonly RouteDiagnosticsState _routeDiagnostics;
   private readonly BridgeOptions _options;
 
   private SimConnect? _simConnect;
   private AutoResetEvent? _messageSignal;
   private bool _requestedOwnshipStream;
+  private bool _requestedOwnshipRouteStream;
+  private bool _ownshipRouteDataEnabled;
   private bool _simFlightActive;
   private DateTimeOffset _lastConnectWarningAt = DateTimeOffset.MinValue;
   private volatile string? _simApplicationName;
@@ -985,11 +1135,13 @@ internal sealed class SimConnectOwnshipService : BackgroundService
   public SimConnectOwnshipService(
     ILogger<SimConnectOwnshipService> logger,
     OwnshipSnapshotStore snapshotStore,
+    RouteDiagnosticsState routeDiagnostics,
     BridgeOptions options
   )
   {
     _logger = logger;
     _snapshotStore = snapshotStore;
+    _routeDiagnostics = routeDiagnostics;
     _options = options;
   }
 
@@ -1064,8 +1216,10 @@ internal sealed class SimConnectOwnshipService : BackgroundService
         _simConnect.OnRecvSimobjectData += OnRecvSimobjectData;
 
         RegisterOwnshipDefinition(_simConnect);
+        TryRegisterOwnshipRouteDefinition(_simConnect);
         RegisterSystemEvents(_simConnect);
         _requestedOwnshipStream = false;
+        _requestedOwnshipRouteStream = false;
         _simFlightActive = false;
         _logger.LogInformation("Connected to SimConnect.");
         return true;
@@ -1103,6 +1257,26 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     simConnect.RegisterDataDefineStruct<OwnshipData>(DefinitionId.Ownship);
   }
 
+  private void TryRegisterOwnshipRouteDefinition(SimConnect simConnect)
+  {
+    _routeDiagnostics.SetProvider("external_simconnect_fs9gps");
+    try
+    {
+      simConnect.AddToDataDefinition(DefinitionId.OwnshipRoute, "C:fs9gps:FlightPlanDepartureAirportIdent", null, SIMCONNECT_DATATYPE.STRING64, 0f, SimConnect.SIMCONNECT_UNUSED);
+      simConnect.AddToDataDefinition(DefinitionId.OwnshipRoute, "C:fs9gps:FlightPlanDestinationAirportIdent", null, SIMCONNECT_DATATYPE.STRING64, 0f, SimConnect.SIMCONNECT_UNUSED);
+      simConnect.RegisterDataDefineStruct<OwnshipRouteData>(DefinitionId.OwnshipRoute);
+      _ownshipRouteDataEnabled = true;
+      _routeDiagnostics.SetSupported(true);
+      _logger.LogInformation("Ownship route identifier stream enabled.");
+    }
+    catch (Exception ex)
+    {
+      _ownshipRouteDataEnabled = false;
+      _routeDiagnostics.SetSupported(false, ex.Message);
+      _logger.LogWarning(ex, "Ownship route identifier stream unavailable; origin/destination datablock display disabled.");
+    }
+  }
+
   private void RegisterSystemEvents(SimConnect simConnect)
   {
     simConnect.SubscribeToSystemEvent(EventId.SimStart, "SimStart");
@@ -1131,6 +1305,24 @@ internal sealed class SimConnectOwnshipService : BackgroundService
 
       _requestedOwnshipStream = true;
       _logger.LogInformation("Ownship data stream requested ({Reason}).", reason);
+
+      if (_ownshipRouteDataEnabled && !_requestedOwnshipRouteStream)
+      {
+        _simConnect.RequestDataOnSimObject(
+          RequestId.OwnshipRoute,
+          DefinitionId.OwnshipRoute,
+          SimConnect.SIMCONNECT_OBJECT_ID_USER,
+          SIMCONNECT_PERIOD.SECOND,
+          0,
+          0,
+          0,
+          0
+        );
+
+        _requestedOwnshipRouteStream = true;
+        _routeDiagnostics.SetRequestActive(true);
+        _logger.LogInformation("Ownship route identifier stream requested ({Reason}).", reason);
+      }
     }
   }
 
@@ -1155,7 +1347,26 @@ internal sealed class SimConnectOwnshipService : BackgroundService
       );
 
       _requestedOwnshipStream = false;
+
+      if (_ownshipRouteDataEnabled && _requestedOwnshipRouteStream)
+      {
+        _simConnect.RequestDataOnSimObject(
+          RequestId.OwnshipRoute,
+          DefinitionId.OwnshipRoute,
+          SimConnect.SIMCONNECT_OBJECT_ID_USER,
+          SIMCONNECT_PERIOD.NEVER,
+          0,
+          0,
+          0,
+          0
+        );
+
+        _requestedOwnshipRouteStream = false;
+        _routeDiagnostics.SetRequestActive(false);
+      }
+
       _snapshotStore.Clear();
+      _routeDiagnostics.ClearRoute();
       _logger.LogInformation("Ownship data stream stopped.");
     }
   }
@@ -1211,7 +1422,27 @@ internal sealed class SimConnectOwnshipService : BackgroundService
 
   private void OnRecvSimobjectData(SimConnect sender, SIMCONNECT_RECV_SIMOBJECT_DATA data)
   {
-    if (data.dwRequestID != (uint)RequestId.Ownship || data.dwData.Length == 0)
+    if (data.dwData.Length == 0)
+    {
+      return;
+    }
+
+    if (data.dwRequestID == (uint)RequestId.OwnshipRoute)
+    {
+      var routeData = (OwnshipRouteData)data.dwData[0];
+      var originAirportId = NormalizeAirportIdent(routeData.OriginAirportId);
+      var destinationAirportId = NormalizeAirportIdent(routeData.DestinationAirportId);
+      if (_snapshotStore.UpdateRoute(originAirportId, destinationAirportId, RouteDataSource.ExternalSimConnect))
+      {
+        _routeDiagnostics.SetProvider("external_simconnect_fs9gps");
+        _routeDiagnostics.SetSupported(true);
+        _routeDiagnostics.SetRequestActive(true);
+        _routeDiagnostics.UpdateRoute(originAirportId, destinationAirportId);
+      }
+      return;
+    }
+
+    if (data.dwRequestID != (uint)RequestId.Ownship)
     {
       return;
     }
@@ -1236,6 +1467,8 @@ internal sealed class SimConnectOwnshipService : BackgroundService
       Callsign: ResolveCallsign(ownship),
       TailNumber: NormalizeText(ownship.AtcId),
       AircraftTitle: NormalizeText(ownship.Title),
+      OriginAirportId: null,
+      DestinationAirportId: null,
       Squawk: FormatSquawk(ownship.TransponderCode),
       SimVersionLabel: ResolveSimVersionLabel(_simApplicationName, _options.SimVersionFallback),
       Lat: ownship.LatitudeDeg,
@@ -1264,8 +1497,11 @@ internal sealed class SimConnectOwnshipService : BackgroundService
   private void DisconnectLocked()
   {
     _requestedOwnshipStream = false;
+    _requestedOwnshipRouteStream = false;
+    _ownshipRouteDataEnabled = false;
     _simFlightActive = false;
     _snapshotStore.Clear();
+    _routeDiagnostics.ClearRoute();
     _simApplicationName = null;
 
     if (_simConnect is not null)
@@ -1402,6 +1638,17 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     return value.Trim();
   }
 
+  private static string? NormalizeAirportIdent(string? value)
+  {
+    var normalized = NormalizeText(value);
+    if (normalized is null)
+    {
+      return null;
+    }
+
+    return normalized.ToUpperInvariant();
+  }
+
   private static double NormalizeHeading(double headingDeg)
   {
     if (!double.IsFinite(headingDeg))
@@ -1430,11 +1677,13 @@ internal sealed class SimConnectOwnshipService : BackgroundService
   private enum DefinitionId : uint
   {
     Ownship = 1,
+    OwnshipRoute = 2,
   }
 
   private enum RequestId : uint
   {
     Ownship = 1,
+    OwnshipRoute = 2,
   }
 
   private enum EventId : uint
@@ -1469,6 +1718,16 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     public string AtcFlightNumber;
 
     public int TransponderCode;
+  }
+
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
+  private struct OwnshipRouteData
+  {
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+    public string OriginAirportId;
+
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+    public string DestinationAirportId;
   }
 }
 

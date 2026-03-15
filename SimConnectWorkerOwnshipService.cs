@@ -6,18 +6,22 @@ internal sealed class SimConnectWorkerOwnshipService : BackgroundService
 {
   private readonly ILogger<SimConnectWorkerOwnshipService> _logger;
   private readonly OwnshipSnapshotStore _snapshotStore;
+  private readonly RouteDiagnosticsState _routeDiagnostics;
   private readonly BridgeOptions _options;
   private DateTimeOffset _lastWorkerWarningAt = DateTimeOffset.MinValue;
 
   public SimConnectWorkerOwnshipService(
     ILogger<SimConnectWorkerOwnshipService> logger,
     OwnshipSnapshotStore snapshotStore,
+    RouteDiagnosticsState routeDiagnostics,
     BridgeOptions options
   )
   {
     _logger = logger;
     _snapshotStore = snapshotStore;
+    _routeDiagnostics = routeDiagnostics;
     _options = options;
+    _routeDiagnostics.SetProvider("worker_json_stream");
   }
 
   protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -42,6 +46,8 @@ internal sealed class SimConnectWorkerOwnshipService : BackgroundService
       try
       {
         process.Start();
+        _routeDiagnostics.SetSupported(true);
+        _routeDiagnostics.SetRequestActive(true);
       }
       catch (Exception ex)
       {
@@ -69,6 +75,7 @@ internal sealed class SimConnectWorkerOwnshipService : BackgroundService
       finally
       {
         _snapshotStore.Clear();
+        _routeDiagnostics.ClearRoute();
       }
 
       if (!stoppingToken.IsCancellationRequested)
@@ -163,6 +170,7 @@ internal sealed class SimConnectWorkerOwnshipService : BackgroundService
           if (TryParseSnapshot(snapshotElement, out var snapshot))
           {
             _snapshotStore.Write(snapshot);
+            _routeDiagnostics.UpdateRoute(snapshot.OriginAirportId, snapshot.DestinationAirportId);
           }
           break;
         case "status":
@@ -192,18 +200,23 @@ internal sealed class SimConnectWorkerOwnshipService : BackgroundService
 
     if (string.Equals(state, "ready", StringComparison.OrdinalIgnoreCase))
     {
+      _routeDiagnostics.SetSupported(true);
+      _routeDiagnostics.SetRequestActive(true);
       _logger.LogInformation("SimConnect worker ready. {Message}", message);
       return;
     }
 
     if (string.Equals(state, "not_implemented", StringComparison.OrdinalIgnoreCase))
     {
+      _routeDiagnostics.SetSupported(false, message);
       _logger.LogWarning("SimConnect worker skeleton active. {Message}", message);
       return;
     }
 
     if (string.Equals(state, "waiting_for_sim", StringComparison.OrdinalIgnoreCase))
     {
+      _routeDiagnostics.SetSupported(true);
+      _routeDiagnostics.SetRequestActive(true);
       _logger.LogWarning("SimConnect worker waiting for simulator. {Message}", message);
       return;
     }
@@ -225,12 +238,16 @@ internal sealed class SimConnectWorkerOwnshipService : BackgroundService
     var vsFpm = ReadDouble(snapshotElement, "vsFpm");
     var onGround = ReadBool(snapshotElement, "onGround");
     var timestampMs = ReadLong(snapshotElement, "timestampMs", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+    var originAirportId = NormalizeAirportIdent(ReadOptionalString(snapshotElement, "originAirportId"));
+    var destinationAirportId = NormalizeAirportIdent(ReadOptionalString(snapshotElement, "destinationAirportId"));
 
     snapshot = new OwnshipSnapshot(
       Id: id,
       Callsign: ReadOptionalString(snapshotElement, "callsign"),
       TailNumber: ReadOptionalString(snapshotElement, "tailNumber"),
       AircraftTitle: ReadOptionalString(snapshotElement, "aircraftTitle"),
+      OriginAirportId: originAirportId,
+      DestinationAirportId: destinationAirportId,
       Squawk: ReadOptionalString(snapshotElement, "squawk"),
       SimVersionLabel: simVersionLabel,
       Lat: lat,
@@ -290,6 +307,8 @@ internal sealed class SimConnectWorkerOwnshipService : BackgroundService
       return;
     }
 
+    _routeDiagnostics.SetSupported(false, reason);
+    _routeDiagnostics.ClearRoute();
     _logger.LogWarning(
       "SimConnect worker unavailable (mode=worker, path={WorkerPath}). {Reason}",
       workerPath,
@@ -390,6 +409,12 @@ internal sealed class SimConnectWorkerOwnshipService : BackgroundService
       JsonValueKind.String => bool.TryParse(property.GetString(), out var parsed) && parsed,
       _ => false,
     };
+  }
+
+  private static string? NormalizeAirportIdent(string? value)
+  {
+    var trimmed = value?.Trim();
+    return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed.ToUpperInvariant();
   }
 }
 
