@@ -278,6 +278,7 @@ app.Map(bridgeOptions.StreamPath, async (
             callsign = snapshot.Callsign,
             tailNumber = snapshot.TailNumber,
             aircraftTitle = snapshot.AircraftTitle,
+            typeCode = snapshot.TypeCode,
             originAirportId,
             destinationAirportId,
             squawk = snapshot.Squawk,
@@ -944,7 +945,8 @@ internal readonly record struct OwnshipSnapshot(
   string Id,
   string? Callsign,
   string? TailNumber,
-  string? AircraftTitle,
+    string? AircraftTitle,
+    string? TypeCode,
   string? OriginAirportId,
   string? DestinationAirportId,
   string? Squawk,
@@ -1250,6 +1252,7 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "VERTICAL SPEED", "feet per minute", SIMCONNECT_DATATYPE.FLOAT64, 0f, SimConnect.SIMCONNECT_UNUSED);
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "SIM ON GROUND", "bool", SIMCONNECT_DATATYPE.INT32, 0f, SimConnect.SIMCONNECT_UNUSED);
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "TITLE", null, SIMCONNECT_DATATYPE.STRING256, 0f, SimConnect.SIMCONNECT_UNUSED);
+    simConnect.AddToDataDefinition(DefinitionId.Ownship, "ATC MODEL", null, SIMCONNECT_DATATYPE.STRING64, 0f, SimConnect.SIMCONNECT_UNUSED);
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "ATC ID", null, SIMCONNECT_DATATYPE.STRING64, 0f, SimConnect.SIMCONNECT_UNUSED);
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "ATC AIRLINE", null, SIMCONNECT_DATATYPE.STRING64, 0f, SimConnect.SIMCONNECT_UNUSED);
     simConnect.AddToDataDefinition(DefinitionId.Ownship, "ATC FLIGHT NUMBER", null, SIMCONNECT_DATATYPE.STRING64, 0f, SimConnect.SIMCONNECT_UNUSED);
@@ -1467,6 +1470,7 @@ internal sealed class SimConnectOwnshipService : BackgroundService
       Callsign: ResolveCallsign(ownship),
       TailNumber: NormalizeText(ownship.AtcId),
       AircraftTitle: NormalizeText(ownship.Title),
+      TypeCode: NormalizeTypeCode(ownship.AtcModel),
       OriginAirportId: null,
       DestinationAirportId: null,
       Squawk: FormatSquawk(ownship.TransponderCode),
@@ -1649,6 +1653,23 @@ internal sealed class SimConnectOwnshipService : BackgroundService
     return normalized.ToUpperInvariant();
   }
 
+  private static string? NormalizeTypeCode(string? value)
+  {
+    var normalized = NormalizeText(value);
+    if (normalized is null)
+    {
+      return null;
+    }
+
+    var compact = new string(normalized.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+    if (compact.Length is < 3 or > 5)
+    {
+      return null;
+    }
+
+    return compact == "MSFS" ? null : compact;
+  }
+
   private static double NormalizeHeading(double headingDeg)
   {
     if (!double.IsFinite(headingDeg))
@@ -1707,6 +1728,9 @@ internal sealed class SimConnectOwnshipService : BackgroundService
 
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
     public string Title;
+
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+    public string AtcModel;
 
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
     public string AtcId;

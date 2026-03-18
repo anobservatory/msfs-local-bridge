@@ -246,6 +246,7 @@ internal sealed class SimConnectWorkerOwnshipService : BackgroundService
       Callsign: ReadOptionalString(snapshotElement, "callsign"),
       TailNumber: ReadOptionalString(snapshotElement, "tailNumber"),
       AircraftTitle: ReadOptionalString(snapshotElement, "aircraftTitle"),
+      TypeCode: ReadOptionalString(snapshotElement, "typeCode"),
       OriginAirportId: originAirportId,
       DestinationAirportId: destinationAirportId,
       Squawk: ReadOptionalString(snapshotElement, "squawk"),

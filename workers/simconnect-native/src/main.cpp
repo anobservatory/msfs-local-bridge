@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <csignal>
 #include <cstdint>
@@ -119,6 +120,7 @@ struct OwnshipData
   double verticalSpeedFpm;
   int32_t simOnGround;
   char title[256];
+  char atcModel[64];
   char atcId[64];
   char atcAirline[64];
   char atcFlightNumber[64];
@@ -150,6 +152,7 @@ struct TelemetrySnapshot
   std::optional<std::string> callsign;
   std::optional<std::string> tailNumber;
   std::optional<std::string> aircraftTitle;
+  std::optional<std::string> typeCode;
   std::optional<std::string> squawk;
   std::string simVersionLabel;
   double lat = 0;
@@ -264,6 +267,7 @@ void EmitTelemetry(const TelemetrySnapshot& snapshot)
   appendOptionalString("callsign", snapshot.callsign);
   appendOptionalString("tailNumber", snapshot.tailNumber);
   appendOptionalString("aircraftTitle", snapshot.aircraftTitle);
+  appendOptionalString("typeCode", snapshot.typeCode);
   appendOptionalString("squawk", snapshot.squawk);
   json << ",\"simVersionLabel\":\"" << EscapeJson(snapshot.simVersionLabel) << "\"";
   json << ",\"lat\":" << snapshot.lat;
@@ -301,6 +305,32 @@ std::optional<std::string> NormalizeText(const std::string& value)
   }
 
   return trimmed;
+}
+
+std::optional<std::string> NormalizeTypeCode(const std::string& value)
+{
+  const auto trimmed = NormalizeText(value);
+  if (!trimmed.has_value())
+  {
+    return std::nullopt;
+  }
+
+  std::string compact;
+  compact.reserve(trimmed->size());
+  for (const unsigned char ch : *trimmed)
+  {
+    if (std::isalnum(ch))
+    {
+      compact.push_back(static_cast<char>(std::toupper(ch)));
+    }
+  }
+
+  if (compact.size() < 3 || compact.size() > 5 || compact == "MSFS")
+  {
+    return std::nullopt;
+  }
+
+  return compact;
 }
 
 std::string ReadFixedString(const char* value, std::size_t length)
@@ -553,6 +583,7 @@ bool EnsureOwnshipDefinition(WorkerState& state)
   if (!Succeeded(api.addToDataDefinition(state.handle, kDefinitionOwnship, "VERTICAL SPEED", "feet per minute", SIMCONNECT_DATATYPE_FLOAT64, 0.0f, static_cast<DWORD>(kSimConnectUnused)))) return false;
   if (!Succeeded(api.addToDataDefinition(state.handle, kDefinitionOwnship, "SIM ON GROUND", "bool", SIMCONNECT_DATATYPE_INT32, 0.0f, static_cast<DWORD>(kSimConnectUnused)))) return false;
   if (!Succeeded(api.addToDataDefinition(state.handle, kDefinitionOwnship, "TITLE", nullptr, SIMCONNECT_DATATYPE_STRING256, 0.0f, static_cast<DWORD>(kSimConnectUnused)))) return false;
+  if (!Succeeded(api.addToDataDefinition(state.handle, kDefinitionOwnship, "ATC MODEL", nullptr, SIMCONNECT_DATATYPE_STRING64, 0.0f, static_cast<DWORD>(kSimConnectUnused)))) return false;
   if (!Succeeded(api.addToDataDefinition(state.handle, kDefinitionOwnship, "ATC ID", nullptr, SIMCONNECT_DATATYPE_STRING64, 0.0f, static_cast<DWORD>(kSimConnectUnused)))) return false;
   if (!Succeeded(api.addToDataDefinition(state.handle, kDefinitionOwnship, "ATC AIRLINE", nullptr, SIMCONNECT_DATATYPE_STRING64, 0.0f, static_cast<DWORD>(kSimConnectUnused)))) return false;
   if (!Succeeded(api.addToDataDefinition(state.handle, kDefinitionOwnship, "ATC FLIGHT NUMBER", nullptr, SIMCONNECT_DATATYPE_STRING64, 0.0f, static_cast<DWORD>(kSimConnectUnused)))) return false;
@@ -688,6 +719,7 @@ void HandleSimobjectData(WorkerState& state, const SimConnectRecvSimobjectData* 
   snapshot.callsign = ResolveCallsign(*ownship);
   snapshot.tailNumber = NormalizeText(ReadFixedString(ownship->atcId, sizeof(ownship->atcId)));
   snapshot.aircraftTitle = NormalizeText(ReadFixedString(ownship->title, sizeof(ownship->title)));
+  snapshot.typeCode = NormalizeTypeCode(ReadFixedString(ownship->atcModel, sizeof(ownship->atcModel)));
   snapshot.squawk = FormatSquawk(ownship->transponderCode);
   snapshot.simVersionLabel = ResolveSimVersionLabel(state.simApplicationName, simVersionFallback);
   snapshot.lat = ownship->latitudeDeg;
