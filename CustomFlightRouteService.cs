@@ -41,17 +41,25 @@ internal sealed class CustomFlightRouteService : BackgroundService
           continue;
         }
 
-        if (!_snapshotStore.UpdateRoute(route.OriginAirportId, route.DestinationAirportId, RouteDataSource.CustomFlightFile))
-        {
-          continue;
-        }
-
         _routeDiagnostics.SetProvider("customflight_files");
         _routeDiagnostics.SetSupported(true);
-        _routeDiagnostics.SetRequestActive(true);
-        _routeDiagnostics.UpdateRoute(route.OriginAirportId, route.DestinationAirportId);
+        _routeDiagnostics.SetRequestActive(route.SourcePath is not null);
 
-        if (!string.Equals(_lastLoggedRoutePath, route.SourcePath, StringComparison.OrdinalIgnoreCase))
+        var routeChanged = _snapshotStore.UpdateRoute(route.OriginAirportId, route.DestinationAirportId, RouteDataSource.CustomFlightFile);
+        var diagnosticsChanged =
+          string.Equals(_routeDiagnostics.Provider, "customflight_files", StringComparison.OrdinalIgnoreCase)
+          && (
+            !string.Equals(_routeDiagnostics.OriginAirportId, route.OriginAirportId, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(_routeDiagnostics.DestinationAirportId, route.DestinationAirportId, StringComparison.OrdinalIgnoreCase)
+          );
+
+        if (routeChanged || diagnosticsChanged)
+        {
+          _routeDiagnostics.UpdateRoute(route.OriginAirportId, route.DestinationAirportId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(route.SourcePath)
+            && !string.Equals(_lastLoggedRoutePath, route.SourcePath, StringComparison.OrdinalIgnoreCase))
         {
           _logger.LogInformation("CustomFlight route provider active (path={Path}).", route.SourcePath);
           _lastLoggedRoutePath = route.SourcePath;
@@ -87,8 +95,9 @@ internal sealed class CustomFlightRouteService : BackgroundService
 
     var routeCandidates = new List<ParsedRouteFile>(capacity: 2);
 
-    if (File.Exists(fltPath) && TryParseFltRoute(fltPath, out var fltOrigin, out var fltDestination))
+    if (File.Exists(fltPath))
     {
+      TryParseFltRoute(fltPath, out var fltOrigin, out var fltDestination);
       routeCandidates.Add(new ParsedRouteFile(
         fltPath,
         File.GetLastWriteTimeUtc(fltPath),
@@ -97,8 +106,9 @@ internal sealed class CustomFlightRouteService : BackgroundService
       ));
     }
 
-    if (File.Exists(plnPath) && TryParsePlnRoute(plnPath, out var plnOrigin, out var plnDestination))
+    if (File.Exists(plnPath))
     {
+      TryParsePlnRoute(plnPath, out var plnOrigin, out var plnDestination);
       routeCandidates.Add(new ParsedRouteFile(
         plnPath,
         File.GetLastWriteTimeUtc(plnPath),
@@ -109,20 +119,18 @@ internal sealed class CustomFlightRouteService : BackgroundService
 
     if (routeCandidates.Count == 0)
     {
-      return false;
+      route = new CustomFlightRoute(null, null, null);
+      return true;
     }
 
     routeCandidates.Sort(static (left, right) => right.LastWriteUtc.CompareTo(left.LastWriteUtc));
 
     var primaryCandidate = routeCandidates[0];
-    var originAirportId = routeCandidates
-      .Select(candidate => candidate.OriginAirportId)
-      .FirstOrDefault(static value => value is not null);
-    var destinationAirportId = routeCandidates
-      .Select(candidate => candidate.DestinationAirportId)
-      .FirstOrDefault(static value => value is not null);
-
-    route = new CustomFlightRoute(originAirportId, destinationAirportId, primaryCandidate.SourcePath);
+    route = new CustomFlightRoute(
+      primaryCandidate.OriginAirportId,
+      primaryCandidate.DestinationAirportId,
+      primaryCandidate.SourcePath
+    );
     return true;
   }
 
@@ -252,7 +260,7 @@ internal sealed class CustomFlightRouteService : BackgroundService
   private readonly record struct CustomFlightRoute(
     string? OriginAirportId,
     string? DestinationAirportId,
-    string SourcePath
+    string? SourcePath
   );
 
   private readonly record struct ParsedRouteFile(
