@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("ShowFirewall39000", "OpenFirewall39000", "RemoveFirewall39000", "ShowFirewall39002", "OpenFirewall39002", "RemoveFirewall39002")]
+  [ValidateSet("ShowFirewall39000", "OpenFirewall39000", "RemoveFirewall39000")]
   [string]$Action = "ShowFirewall39000",
   [int]$Port = 39000,
   [switch]$Force
@@ -131,25 +131,7 @@ switch ($Action) {
     break
   }
 
-  "ShowFirewall39002" {
-    Show-FirewallRule -RuleName $ruleName
-    break
-  }
-
   "OpenFirewall39000" {
-    Ensure-AdminOrExit -RequestedAction $Action
-    $ok = Confirm-RepairAction `
-      -Title "Open inbound TCP $Port for Private network" `
-      -WhatChanges "Adds/updates Windows Firewall inbound allow rule '$ruleName'."
-    if (-not $ok) {
-      Write-Host "[CANCELLED] No changes were applied."
-      exit 0
-    }
-    Add-OrUpdateFirewallRule -RuleName $ruleName -RulePort $Port
-    break
-  }
-
-  "OpenFirewall39002" {
     Ensure-AdminOrExit -RequestedAction $Action
     $ok = Confirm-RepairAction `
       -Title "Open inbound TCP $Port for Private network" `
@@ -175,18 +157,6 @@ switch ($Action) {
     break
   }
 
-  "RemoveFirewall39002" {
-    Ensure-AdminOrExit -RequestedAction $Action
-    $ok = Confirm-RepairAction `
-      -Title "Remove inbound TCP $Port firewall rule" `
-      -WhatChanges "Removes Windows Firewall rule '$ruleName'."
-    if (-not $ok) {
-      Write-Host "[CANCELLED] No changes were applied."
-      exit 0
-    }
-    Remove-FirewallRule -RuleName $ruleName
-    break
-  }
 }
 
 Write-Host ""

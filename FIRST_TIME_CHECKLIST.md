@@ -1,50 +1,47 @@
-# MSFS Local Bridge First-Time Checklist (WSS Bootstrap)
+# MSFS Local Bridge First-Time Checklist
 
 Scope: same-network setup (`MSFS Windows -> Bridge -> anobservatory.com`).
 
-## 1) On Windows host (bridge machine)
+## 1) On Windows host
 
-1. Open normal PowerShell (not Administrator).
-2. Run:
+1. Extract the release zip on the Windows PC that runs MSFS.
+2. Open normal PowerShell, not Administrator.
+3. Run:
 
 ```powershell
 .\start.ps1
 ```
 
-3. Keep terminal open while flying.
-4. Confirm output shows:
-   - secure stream: `wss://<WINDOWS_IP>:39002/stream`
-   - listener onboarding page: `http://<WINDOWS_IP>:39000/bootstrap`
+4. Keep the terminal open while flying.
+5. Confirm output shows a local stream:
+   - `ws://<WINDOWS_IP>:39000/stream`
 
-## 2) On listener device (Mac/Windows, one-time bootstrap)
+## 2) Firewall, only if another device cannot connect
 
-1. Open onboarding page from host output:
-   `http://<WINDOWS_IP>:39000/bootstrap`
-2. Run one-time setup script from that page:
-   - Mac:
-     `curl -fsSL http://<WINDOWS_IP>:39000/bootstrap/listener/mac.sh | bash`
-   - Windows:
-     `powershell -ExecutionPolicy Bypass -Command "iwr 'http://<WINDOWS_IP>:39000/bootstrap/listener/windows.ps1' -UseBasicParsing | iex"`
-3. Open the `anobservatory.com` connect URL printed by host.
-4. Open MSFS Connect panel and click `Start Sync`.
-
-## 3) Expected healthy state
-
-1. Badge: `Connected` (or short `Running` during reconnect).
-2. Status: `Streaming telemetry.` during active flight.
-3. Ownship moves continuously on map.
-
-## 4) If another device cannot connect
-
-1. Run one elevated repair on host:
+Run one elevated repair on the Windows host:
 
 ```powershell
 .\repair-elevated-v0.ps1 -Action OpenFirewall39000 -Port 39000
-.\repair-elevated-v0.ps1 -Action OpenFirewall39002 -Port 39002
 ```
 
-2. Restart bridge:
+Then restart the bridge:
 
 ```powershell
 .\start.ps1
 ```
+
+## 3) Open anobservatory
+
+Open the connect URL printed by the bridge or desktop app:
+
+```text
+https://anobservatory.com/?msfsBridgeUrl=ws%3A%2F%2F<WINDOWS_IP>%3A39000%2Fstream
+```
+
+When the browser asks for local network access, allow it.
+
+## 4) Expected healthy state
+
+1. Browser local network access is allowed.
+2. MSFS is loaded into an active flight.
+3. Ownship moves continuously on the map.

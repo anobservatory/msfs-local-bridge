@@ -1,8 +1,5 @@
 ﻿param(
   [int]$Port = 39000,
-  [int]$WssPort = 39002,
-  [string]$LocalDomain = "ao.home.arpa",
-  [string]$CertDir = "certs",
   [ValidateSet("Text", "Json")]
   [string]$Format = "Text"
 )
@@ -130,24 +127,6 @@ function Get-PrivateLanIPv4 {
   }
 
   return @($ordered)
-}
-
-function Resolve-PathUnderRoot {
-  param(
-    [string]$Root,
-    [string]$PathValue
-  )
-
-  if ([System.IO.Path]::IsPathRooted($PathValue)) {
-    return [System.IO.Path]::GetFullPath($PathValue)
-  }
-
-  return [System.IO.Path]::GetFullPath((Join-Path $Root $PathValue))
-}
-
-function Get-SafeCertBaseName {
-  param([string]$Domain)
-  return ($Domain -replace '[^a-zA-Z0-9._-]', '_')
 }
 
 function Write-TextCheck {
@@ -309,56 +288,6 @@ else {
   Add-Check -Id "network.firewall_private_$Port" -Status "warn" -Message "Managed firewall rule not found for inbound TCP $Port." -RepairAction "Run as Administrator: .\\repair-elevated-v0.ps1 -Action OpenFirewall39000 -Port $Port"
 }
 
-if ($WssPort -ne $Port) {
-  $wssRepairAction = "Run as Administrator: .\\repair-elevated-v0.ps1 -Action OpenFirewall39002 -Port $WssPort"
-  if (Test-ManagedFirewallRule -RulePort $WssPort) {
-    Add-Check -Id "network.firewall_private_$WssPort" -Status "pass" -Message "Managed firewall rule present for inbound TCP $WssPort."
-  }
-  else {
-    Add-Check -Id "network.firewall_private_$WssPort" -Status "warn" -Message "Managed firewall rule not found for inbound TCP $WssPort." -RepairAction $wssRepairAction
-  }
-}
-
-$safeCertBase = Get-SafeCertBaseName -Domain $LocalDomain
-$certRoot = Resolve-PathUnderRoot -Root $projectRoot -PathValue $CertDir
-$certPath = Join-Path $certRoot "$safeCertBase.pem"
-$keyPath = Join-Path $certRoot "$safeCertBase-key.pem"
-$pfxPath = Join-Path $certRoot "$safeCertBase.p12"
-$rootCaPath = Join-Path $certRoot "rootCA.pem"
-
-if (Test-Path $pfxPath) {
-  Add-Check -Id "network.wss_pfx" -Status "pass" -Message "WSS PKCS#12 bundle found: $pfxPath"
-}
-else {
-  Add-Check -Id "network.wss_pfx" -Status "warn" -Message "WSS PKCS#12 bundle missing: $pfxPath" -RepairAction "Run: .\\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`""
-}
-
-if (Test-Path $certPath) {
-  Add-Check -Id "network.wss_cert" -Status "pass" -Message "WSS certificate found: $certPath"
-}
-elseif (Test-Path $pfxPath) {
-  Add-Check -Id "network.wss_cert" -Status "pass" -Message "WSS PEM certificate not required because PKCS#12 bundle exists: $pfxPath"
-}
-else {
-  Add-Check -Id "network.wss_cert" -Status "warn" -Message "WSS certificate missing: $certPath" -RepairAction "Run: .\\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`""
-}
-
-if (Test-Path $keyPath) {
-  Add-Check -Id "network.wss_key" -Status "pass" -Message "WSS key found: $keyPath"
-}
-elseif (Test-Path $pfxPath) {
-  Add-Check -Id "network.wss_key" -Status "pass" -Message "WSS PEM private key not required because PKCS#12 bundle exists: $pfxPath"
-}
-else {
-  Add-Check -Id "network.wss_key" -Status "warn" -Message "WSS key missing: $keyPath" -RepairAction "Run: .\\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`""
-}
-
-if (Test-Path $rootCaPath) {
-  Add-Check -Id "network.root_ca" -Status "pass" -Message "Root CA export found: $rootCaPath"
-}
-else {
-  Add-Check -Id "network.root_ca" -Status "warn" -Message "Root CA export missing: $rootCaPath" -RepairAction "Run: .\\setup-wss-cert-v0.ps1 -LocalDomain $LocalDomain -CertDir `"$CertDir`""
-}
 $portLines = @(netstat -ano | Select-String ":$Port")
 $listeningLines = @($portLines | Where-Object { $_.Line -match "LISTENING" })
 if ($listeningLines.Count -eq 0) {
@@ -386,35 +315,6 @@ else {
   }
   else {
     Add-Check -Id "network.port_$Port" -Status "warn" -Message "TCP $Port is already in use: $conflict" -RepairAction "Stop conflicting process or use another port."
-  }
-}
-
-if ($WssPort -ne $Port) {
-  $wssPortLines = @(netstat -ano | Select-String ":$WssPort")
-  $wssListeningLines = @($wssPortLines | Where-Object { $_.Line -match "LISTENING" })
-  if ($wssListeningLines.Count -eq 0) {
-    Add-Check -Id "network.port_$WssPort" -Status "pass" -Message "TCP $WssPort is free (no current LISTENING process)"
-  }
-  else {
-    $conflict = ($wssListeningLines[0].Line -replace "\s+", " ").Trim()
-    $parts = $conflict.Split(" ")
-    $pidText = $parts[-1]
-    $parsedPid = 0
-    $processName = ""
-
-    if ([int]::TryParse($pidText, [ref]$parsedPid)) {
-      $process = Get-Process -Id $parsedPid -ErrorAction SilentlyContinue
-      if ($null -ne $process) {
-        $processName = $process.ProcessName
-      }
-    }
-
-    if ($processName) {
-      Add-Check -Id "network.port_$WssPort" -Status "warn" -Message "TCP $WssPort is in use by $processName (PID $parsedPid)" -RepairAction "Stop conflicting process or choose another WSS port."
-    }
-    else {
-      Add-Check -Id "network.port_$WssPort" -Status "warn" -Message "TCP $WssPort is already in use: $conflict" -RepairAction "Stop conflicting process or choose another WSS port."
-    }
   }
 }
 

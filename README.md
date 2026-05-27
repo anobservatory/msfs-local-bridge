@@ -1,114 +1,74 @@
 # MSFS Local Bridge (Windows)
 
-This folder contains a Windows console bridge:
+Windows bridge for streaming MSFS SimConnect telemetry to anobservatory.
 
-- `MSFS SimConnect` -> `WebSocket stream`
-- Stream endpoint: `ws://<windows-ip>:39000/stream`
-- Secure stream endpoint (default when cert is configured): `wss://<windows-ip>:39002/stream`
-- Domain fallback endpoint: `wss://ao.home.arpa:39002/stream` (requires hosts/DNS mapping)
-- Listener bootstrap endpoint: `http://<windows-ip>:39000/bootstrap`
-- Payload shape matches `src/services/msfs/msfsClient.ts`
+- Local stream endpoint: `ws://<WINDOWS_IP>:39000/stream`
+- Browser entry point: `https://anobservatory.com/?msfsBridgeUrl=ws%3A%2F%2F<WINDOWS_IP>%3A39000%2Fstream`
+- Default setup does not require a custom certificate, local Root CA, listener certificate install, or TCP `39002`.
+- Payload shape matches `src/services/msfs/msfsClient.ts`.
 
-If you are flying at KJFK but the app shows a fixed C172 around KSFO, that usually means a mock sender is running.  
-This bridge is the real SimConnect sender.
+If you are flying at KJFK but the app shows a fixed C172 around KSFO, a mock sender is probably running. This bridge is the real SimConnect sender.
 
-First-time setup one-page checklist:
+## Quick Start
 
-- `FIRST_TIME_CHECKLIST.md` (included in release zip)
-
-## 0) 6-step quick start (Tester)
-
-1. Extract `msfs-local-bridge-vX.Y.Z-self-contained.zip` on Windows (recommended).
-2. Verify both SimConnect DLL files exist in package root and `lib/`.
-3. Open normal PowerShell (not `Run as administrator`).
-4. Run `.\start.ps1` (one-click default: runs preflight, cert setup, then starts bridge in WSS mode).
-5. Keep the terminal open while flying.
-6. On listener device, run one-time bootstrap from host output:
-   - `http://<WINDOWS_IP>:39000/bootstrap`
-7. Open the printed `Quick open on anobservatory.com` URL and choose `Display -> MSFS Local`.
-
-## 0.0) Current release lock (v0.2.14)
-
-1. Source package: `dist/msfs-local-bridge-source-v0.2.14.zip`
-2. SHA256 manifest: `SHA256SUMS-v0.2.14.txt`
-3. Git tag: `v0.2.14`
-
-## 0.1) Privilege policy (V1 baseline)
-
-1. Default runtime mode is standard user.
-2. Administrator mode is not required for normal bridge operation.
-3. Elevation is reserved for explicit repair actions only.
-4. Use `.\repair-elevated-v0.ps1` for approved elevated repair actions.
-
-## 0.2) One-click diagnostics (V1 baseline)
-
-Run diagnostics in text mode:
+1. Extract the Windows release zip.
+2. Open normal PowerShell, not Administrator.
+3. Run:
 
 ```powershell
-.\diagnostics-v0.ps1
+.\start.ps1
 ```
 
-Run diagnostics in JSON mode:
+4. Keep the terminal open while flying.
+5. Open the printed anobservatory URL.
+6. Allow the browser local network access prompt.
 
-```powershell
-.\diagnostics-v0.ps1 -Format Json
-```
+First-time checklist:
 
-## 1) Prerequisites (Windows PC)
+- `FIRST_TIME_CHECKLIST.md`
+
+## Prerequisites
 
 1. MSFS 2020 or 2024 installed.
-2. `.NET 8 SDK` installed (source-build workflow only).
+2. Visual C++ Redistributable x64 installed.
 3. SimConnect DLLs available:
-   - `Microsoft.FlightSimulator.SimConnect.dll` (managed wrapper)
-   - `SimConnect.dll` (native runtime)
-4. Visual C++ Redistributable (x64)
-   - Microsoft Visual C++ 2015-2022 Redistributable (x64)
+   - `Microsoft.FlightSimulator.SimConnect.dll`
+   - `SimConnect.dll`
+4. .NET is required only for source/dev workflows or non-self-contained packages.
 
-## 2) SimConnect DLL placement
+The desktop app package handles the normal Windows host onboarding flow and can install missing runtime prerequisites.
+
+## SimConnect DLL Placement
 
 For source builds, copy both files into:
 
-`lib/`
+```text
+lib/
+```
 
 Final files should be:
 
-`lib/Microsoft.FlightSimulator.SimConnect.dll`
-`lib/SimConnect.dll`
-
-If you do not know where the DLL is, search in PowerShell:
-
-```powershell
-Get-ChildItem -Path "C:\" -Filter "Microsoft.FlightSimulator.SimConnect.dll" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 5 FullName
-Get-ChildItem -Path "C:\" -Filter "SimConnect.dll" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 10 FullName
+```text
+lib/Microsoft.FlightSimulator.SimConnect.dll
+lib/SimConnect.dll
 ```
 
-Release package note:
+Release packages should contain both DLLs in the package root and `lib/`.
 
-- `msfs-local-bridge-vX.Y.Z-self-contained.zip` should already contain both DLLs in root and `lib/`.
-- `msfs-local-bridge-vX.Y.Z-lite.zip` should also contain both DLLs in root and `lib/`.
-- If runtime reports root DLL missing, copy from `lib/` to root once.
-- Release zip is `win-x64 self-contained`, so testers do not need .NET runtime/SDK.
+## Run Bridge
 
-## 3) Preflight + run bridge on Windows
-
-Release zip (tester):
+Release zip:
 
 ```powershell
 cd <extracted-zip-folder>
 .\start.ps1
 ```
 
-Source layout (developer):
+Source layout:
 
 ```powershell
 cd <msfs-local-bridge-repo-root>
 .\start.ps1
-```
-
-Advanced mode (custom flags):
-
-```powershell
-.\start-msfs-sync.ps1 -LocalDomain ao.home.arpa -RequireWss
 ```
 
 If script execution is blocked once, run:
@@ -119,7 +79,7 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
 Then run `.\start.ps1` again.
 
-## 4) Confirm it is live
+## Confirm It Is Live
 
 In `cmd`:
 
@@ -131,149 +91,106 @@ You should see `LISTENING`.
 
 Browser check on Windows:
 
-`http://127.0.0.1:39000/`
+```text
+http://127.0.0.1:39000/
+```
 
-Should return JSON like:
+Expected response:
 
 ```json
 {"name":"msfs-local-bridge","status":"ok","streamPath":"/stream","sampleIntervalMs":200}
 ```
 
-## 5) Connect listener device (Mac/Windows)
+## Connect anobservatory
 
-Recommended WSS-first flow (no `.env.local` edit):
-
-1. Open host onboarding page:
+Use the URL printed by `start.ps1`:
 
 ```text
-http://<WINDOWS_IP>:39000/bootstrap
+https://anobservatory.com/?msfsBridgeUrl=ws%3A%2F%2F<WINDOWS_IP>%3A39000%2Fstream
 ```
 
-2. Run one-time listener setup from that page:
-   - Mac:
-     `curl -fsSL http://<WINDOWS_IP>:39000/bootstrap/listener/mac.sh | bash`
-   - Windows:
-     `powershell -ExecutionPolicy Bypass -Command "iwr 'http://<WINDOWS_IP>:39000/bootstrap/listener/windows.ps1' -UseBasicParsing | iex"`
-3. Use one URL when opening AO panel:
+Chrome and Edge may show a local network access prompt. Allow it.
 
-```text
-https://anobservatory.com/?msfsBridgeUrl=wss://<WINDOWS_IP>:39002/stream
-```
-
-4. This value is persisted in browser local storage for next runs.
-
-Fallback WS/local-dev flow:
+For local web development only:
 
 ```text
 http://localhost:3000/?msfsBridgeUrl=ws://<WINDOWS_IP>:39000/stream
 ```
 
-Legacy env-based method:
+## Firewall and Network
 
-```env
-VITE_MSFS_BRIDGE_URL=ws://<WINDOWS_IP>:39000/stream
-```
+Windows and the listener device must be on the same LAN.
 
-Then restart web app dev server:
+Default required inbound port:
 
-```bash
-npm run dev
-```
-
-## 6) Firewalls and network
-
-1. Windows and listener device must be on same LAN.
-2. Allow inbound TCP `39000` and `39002` on Windows (Private network).
-3. Keep bridge terminal open while flying.
+- TCP `39000`
 
 Optional elevated repair helper:
 
 ```powershell
 .\repair-elevated-v0.ps1 -Action ShowFirewall39000
-.\repair-elevated-v0.ps1 -Action OpenFirewall39000
-.\repair-elevated-v0.ps1 -Action RemoveFirewall39000
-.\repair-elevated-v0.ps1 -Action ShowFirewall39002 -Port 39002
-.\repair-elevated-v0.ps1 -Action OpenFirewall39002 -Port 39002
-.\repair-elevated-v0.ps1 -Action RemoveFirewall39002 -Port 39002
+.\repair-elevated-v0.ps1 -Action OpenFirewall39000 -Port 39000
+.\repair-elevated-v0.ps1 -Action RemoveFirewall39000 -Port 39000
 ```
 
-Quick diagnostics helper:
+## Diagnostics
+
+Text mode:
 
 ```powershell
 .\diagnostics-v0.ps1
 ```
 
-## 7) Common problems
+JSON mode:
+
+```powershell
+.\diagnostics-v0.ps1 -Format Json
+```
+
+## Common Problems
 
 1. `39000` is occupied by `node.exe`: old mock process is running.
-2. `LISTENING` exists but map does not move:
-   - wrong `VITE_MSFS_BRIDGE_URL`
-   - web app not restarted after `.env.local` change
+2. `LISTENING` exists but the map does not move:
+   - wrong `msfsBridgeUrl`
+   - browser local network access was denied
+   - MSFS is not in an active flight yet
 3. Still fixed `MSFS123/C172` path:
    - mock sender is still active somewhere
 4. Startup fails with `Could not load ... Microsoft.FlightSimulator.SimConnect.dll`:
-   - copy both DLLs to `lib` (not only managed DLL)
-   - run `dotnet clean` then rerun bridge
-   - install Microsoft Visual C++ 2015-2022 Redistributable (x64)
-   - verify both DLLs also exist in output root (`bin/.../win-x64/`)
-5. Bridge starts but no ownship:
-   - MSFS not in active flight session yet
-   - SimConnect DLL missing/mismatch
-6. `Waiting for MSFS + SimConnect... COMException (0x80004005 / E_FAIL)` repeats during startup:
+   - copy both DLLs to `lib/`
+   - install Microsoft Visual C++ 2015-2022 Redistributable x64
+   - verify both DLLs also exist in output root
+5. `Waiting for MSFS + SimConnect... COMException (0x80004005 / E_FAIL)` repeats during startup:
    - expected while MSFS is still loading or not in an active flight
-   - if it continues for more than 2 minutes after cockpit load, then investigate
-7. `Application Control policy has blocked this file (0x800711C7)`:
+   - if it continues for more than 2 minutes after cockpit load, investigate SimConnect/DLL setup
+6. `Application Control policy has blocked this file (0x800711C7)`:
    - right-click zip -> Properties -> Unblock before extract
    - or run in a folder excluded from strict organization policy
-8. `preflight-v0.ps1` shows `No build output found yet`:
-   - this is normal before first `dotnet run` or in release zip layout
-9. `preflight-v0.ps1` cannot detect Visual C++ redistributable but bridge runs:
-   - treat as non-blocking warning when SimConnect actually connects
-10. Runtime says `Could not load ... Microsoft.FlightSimulator.SimConnect.dll` in release zip:
-   - confirm both DLLs exist in package root
-   - quick fix: copy both DLLs from `lib/` to package root
-11. Running bridge as Administrator by default:
-   - not required for normal sync
-   - use standard user shell unless a specific repair action requests elevation
-12. WSS URL fails with cert warning or `ERR_CERT`:
-   - run `.\setup-wss-cert-v0.ps1 -LocalDomain ao.home.arpa`
-   - trust generated local CA/cert on listener device
-   - if using domain fallback URL, verify hosts/DNS maps `ao.home.arpa` to Windows bridge IP
 
-## 8) Optional runtime env vars
+## Runtime Env Vars
 
 Defaults are safe for first run.
 
 - `MSFS_BRIDGE_BIND` default: `0.0.0.0`
 - `MSFS_BRIDGE_PORT` default: `39000`
 - `MSFS_BRIDGE_PATH` default: `/stream`
-- `MSFS_BRIDGE_WSS_ENABLED` default: `false` (enabled automatically by `run-bridge.ps1` when cert exists)
-- `MSFS_BRIDGE_WSS_PORT` default: `39002`
-- `MSFS_BRIDGE_PUBLIC_WSS_HOST` default in run script: first detected LAN IP (fallback: `ao.home.arpa`)
-- `MSFS_BRIDGE_TLS_CERT_PATH` default: `certs/ao.home.arpa.pem`
-- `MSFS_BRIDGE_TLS_KEY_PATH` default: `certs/ao.home.arpa-key.pem`
 - `MSFS_BRIDGE_SAMPLE_MS` default: `200`
 - `MSFS_BRIDGE_POLL_MS` default: `25`
-- `MSFS_BRIDGE_RECONNECT_MS` default: `2000` (initial reconnect delay)
-- `MSFS_BRIDGE_RECONNECT_MAX_MS` default: `10000` (backoff ceiling)
+- `MSFS_BRIDGE_RECONNECT_MS` default: `2000`
+- `MSFS_BRIDGE_RECONNECT_MAX_MS` default: `10000`
 
-Reconnect policy baseline:
+Legacy WSS support remains available in source for advanced testing, but it is not part of the default onboarding or package flow.
 
-1. Initial reconnect delay starts at `MSFS_BRIDGE_RECONNECT_MS`.
-2. Delay doubles on repeated connect failures.
-3. Delay is capped by `MSFS_BRIDGE_RECONNECT_MAX_MS`.
-4. Delay resets to initial value after a successful SimConnect reconnect.
+## Package Build
 
-## 9) V0 Package Build (Operator)
-
-Build portable release zip (recommended self-contained):
+Build portable release zip:
 
 ```powershell
 cd <msfs-local-bridge-repo-root>
 .\publish-v0.ps1 -Version 0.2.14 -Package self-contained
 ```
 
-Build lite zip (.NET required on tester machine):
+Build lite zip:
 
 ```powershell
 cd <msfs-local-bridge-repo-root>
@@ -285,37 +202,4 @@ Output:
 - `dist/msfs-local-bridge-v0.2.14-self-contained.zip`
 - `dist/msfs-local-bridge-v0.2.14-lite.zip`
 
-This package excludes source `bin/obj` clutter and includes runtime bridge files (`MsfsLocalBridge.exe`, `start.ps1`, `start-msfs-sync.ps1`, `run-bridge.ps1`, `setup-wss-cert-v0.ps1`, `preflight-v0.ps1`, `diagnostics-v0.ps1`, `repair-elevated-v0.ps1`, `README.md`, `FIRST_TIME_CHECKLIST.md`) needed by testers.
-
-## 10) Checksum Generation and Verification (Operator)
-
-Generate checksums for release artifacts:
-
-```powershell
-Get-FileHash .\dist\msfs-local-bridge-v0.2.14-self-contained.zip -Algorithm SHA256
-Get-FileHash .\dist\msfs-local-bridge-v0.2.14-lite.zip -Algorithm SHA256
-Get-FileHash .\dist\msfs-local-bridge-source-v0.2.14.zip -Algorithm SHA256
-```
-
-Canonical manifest file:
-
-- `SHA256SUMS-v0.2.14.txt`
-
-## 11) Version Tagging Rule (Release)
-
-Use a semantic git tag and matching package version:
-
-1. Git tag format: `vMAJOR.MINOR.PATCH` (example: `v0.2.14`)
-2. Publish arguments:
-   - `.\publish-v0.ps1 -Version 0.2.14 -Package self-contained`
-   - `.\publish-v0.ps1 -Version 0.2.14 -Package lite`
-3. Output packages:
-   - `msfs-local-bridge-v0.2.14-self-contained.zip`
-   - `msfs-local-bridge-v0.2.14-lite.zip`
-
-Release command example:
-
-```bash
-git tag v0.2.14
-git push origin v0.2.14
-```
+This package excludes source `bin/obj` clutter and includes runtime bridge files needed by testers.

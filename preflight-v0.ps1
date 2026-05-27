@@ -1,8 +1,5 @@
 ﻿param(
   [int]$Port = 39000,
-  [int]$WssPort = 39002,
-  [string]$LocalDomain = "ao.home.arpa",
-  [string]$CertDir = "certs",
   [switch]$Strict
 )
 
@@ -146,24 +143,6 @@ function Get-PrivateLanIPv4 {
   return @($ordered)
 }
 
-function Resolve-PathUnderRoot {
-  param(
-    [string]$Root,
-    [string]$PathValue
-  )
-
-  if ([System.IO.Path]::IsPathRooted($PathValue)) {
-    return [System.IO.Path]::GetFullPath($PathValue)
-  }
-
-  return [System.IO.Path]::GetFullPath((Join-Path $Root $PathValue))
-}
-
-function Get-SafeCertBaseName {
-  param([string]$Domain)
-  return ($Domain -replace '[^a-zA-Z0-9._-]', '_')
-}
-
 function Test-PortAvailability {
   param([int]$RulePort)
 
@@ -284,8 +263,7 @@ $lanIps = @(Get-PrivateLanIPv4)
 if ($lanIps.Count -gt 0) {
   $preview = @($lanIps | Select-Object -First 2)
   $sampleUrl = "ws://$($preview[0]):$Port/stream"
-  $sampleSecureUrl = "wss://$LocalDomain`:$WssPort/stream"
-  Write-Check -Status PASS -Message "Private LAN IPv4 detected: $($preview -join ', ') (sample bridge URL: $sampleUrl, sample secure URL: $sampleSecureUrl)"
+  Write-Check -Status PASS -Message "Private LAN IPv4 detected: $($preview -join ', ') (sample bridge URL: $sampleUrl)"
 }
 else {
   Write-Check -Status WARN -Message "No private LAN IPv4 detected. Verify same-network setup before split-device sync."
@@ -298,15 +276,6 @@ else {
   Write-Check -Status WARN -Message "Managed firewall rule not found for inbound TCP $Port (needed when Mac/mobile cannot connect)."
   Write-Host "  -> Repair: Run as Administrator:"
   Write-Host "     .\repair-elevated-v0.ps1 -Action OpenFirewall39000 -Port $Port"
-}
-
-if (Test-ManagedFirewallRule -RulePort $WssPort) {
-  Write-Check -Status PASS -Message "Managed firewall rule present for inbound TCP $WssPort."
-}
-else {
-  Write-Check -Status WARN -Message "Managed firewall rule not found for inbound TCP $WssPort (needed for WSS clients)."
-  Write-Host "  -> Repair: Run as Administrator:"
-  Write-Host "     .\repair-elevated-v0.ps1 -Action OpenFirewall39002 -Port $WssPort"
 }
 
 $vcDisplayNames = @(
@@ -362,51 +331,7 @@ else {
   Write-Check -Status WARN -Message "Visual C++ Redistributable (x64) not detected (bridge can still work if already present by policy/runtime image)"
 }
 
-$safeCertBase = Get-SafeCertBaseName -Domain $LocalDomain
-$certRoot = Resolve-PathUnderRoot -Root $PSScriptRoot -PathValue $CertDir
-$certPath = Join-Path $certRoot "$safeCertBase.pem"
-$keyPath = Join-Path $certRoot "$safeCertBase-key.pem"
-$pfxPath = Join-Path $certRoot "$safeCertBase.p12"
-$rootCaPath = Join-Path $certRoot "rootCA.pem"
-
-if (Test-Path $pfxPath) {
-  Write-Check -Status PASS -Message "WSS PKCS#12 bundle found: $pfxPath"
-}
-else {
-  Write-Check -Status WARN -Message "WSS PKCS#12 bundle missing: $pfxPath"
-}
-
-if (Test-Path $certPath) {
-  Write-Check -Status PASS -Message "WSS certificate found: $certPath"
-}
-elseif (Test-Path $pfxPath) {
-  Write-Check -Status PASS -Message "WSS PEM certificate not required because PKCS#12 bundle exists: $pfxPath"
-}
-else {
-  Write-Check -Status WARN -Message "WSS certificate missing: $certPath"
-}
-
-if (Test-Path $keyPath) {
-  Write-Check -Status PASS -Message "WSS key found: $keyPath"
-}
-elseif (Test-Path $pfxPath) {
-  Write-Check -Status PASS -Message "WSS PEM private key not required because PKCS#12 bundle exists: $pfxPath"
-}
-else {
-  Write-Check -Status WARN -Message "WSS key missing: $keyPath"
-}
-
-if (Test-Path $rootCaPath) {
-  Write-Check -Status PASS -Message "Root CA export found: $rootCaPath"
-}
-else {
-  Write-Check -Status WARN -Message "Root CA export missing: $rootCaPath (listener bootstrap scripts may fail)"
-}
-
 Test-PortAvailability -RulePort $Port
-if ($WssPort -ne $Port) {
-  Test-PortAvailability -RulePort $WssPort
-}
 
 Write-Host ""
 Write-Host "Summary: PASS/FAIL/WARN checks complete" -ForegroundColor Cyan

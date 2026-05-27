@@ -13,6 +13,7 @@ param(
   [switch]$SkipCertSetup,
   [switch]$SkipLanHints,
   [switch]$DisableWss,
+  [switch]$EnableWss,
   [switch]$RequireWss,
   [switch]$Force
 )
@@ -35,7 +36,7 @@ $certRoot = if ([System.IO.Path]::IsPathRooted($CertDir)) {
 }
 $certPath = Join-Path $certRoot "$safeCertBase.pem"
 $keyPath = Join-Path $certRoot "$safeCertBase-key.pem"
-$wssRequested = -not $DisableWss
+$wssRequested = ($EnableWss -or $RequireWss) -and -not $DisableWss
 
 if (-not $SkipPreflight) {
   if (-not (Test-Path $preflightScript)) {
@@ -46,7 +47,7 @@ if (-not $SkipPreflight) {
   Write-Host "Step 1/3: Running preflight..."
   Write-Host ""
 
-  & $preflightScript -Port $Port -WssPort $WssPort -LocalDomain $LocalDomain -CertDir $CertDir -Strict
+  & $preflightScript -Port $Port -Strict
   $preflightExitCode = $LASTEXITCODE
   if ($preflightExitCode -ne 0) {
     Write-Host ""
@@ -94,7 +95,7 @@ if ($wssRequested) {
   }
 }
 else {
-  Write-Host "Step 2/3: WSS disabled by request (-DisableWss)." -ForegroundColor Yellow
+  Write-Host "Step 2/3: WSS certificate setup not needed for default local-network mode."
 }
 
 Write-Host ""
@@ -117,8 +118,11 @@ $runArgs = @{
 if ($SkipLanHints) {
   $runArgs.SkipLanHints = $true
 }
-if ($DisableWss) {
+if (-not $wssRequested) {
   $runArgs.DisableWss = $true
+}
+elseif ($EnableWss) {
+  $runArgs.EnableWss = $true
 }
 if ($RequireWss) {
   $runArgs.RequireWss = $true

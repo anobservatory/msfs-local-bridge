@@ -13,6 +13,7 @@ param(
   [switch]$SkipCertSetup,
   [switch]$SkipLanHints,
   [switch]$DisableWss,
+  [switch]$EnableWss,
   [switch]$Force,
   [switch]$NoRequireWss
 )
@@ -25,7 +26,7 @@ if (-not (Test-Path $starter)) {
 }
 
 # One-click default entrypoint for testers.
-# Defaults to WSS-required mode; advanced overrides are still available.
+# Defaults to local-network WS mode; WSS remains an explicit legacy override.
 $starterArgs = @{
   BindHost = $BindHost
   Port = $Port
@@ -48,14 +49,17 @@ if ($SkipCertSetup) {
 if ($SkipLanHints) {
   $starterArgs.SkipLanHints = $true
 }
-if ($DisableWss) {
+if ($EnableWss -and -not $DisableWss) {
+  if (-not $NoRequireWss) {
+    $starterArgs.RequireWss = $true
+  }
+  $starterArgs.EnableWss = $true
+}
+else {
   $starterArgs.DisableWss = $true
 }
 if ($Force) {
   $starterArgs.Force = $true
-}
-if (-not $NoRequireWss -and -not $DisableWss) {
-  $starterArgs.RequireWss = $true
 }
 
 & $starter @starterArgs

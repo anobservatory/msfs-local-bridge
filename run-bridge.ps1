@@ -15,6 +15,7 @@
   [string]$SimConnectWorkerArgs = "--stdio-json",
   [switch]$SkipLanHints,
   [switch]$DisableWss,
+  [switch]$EnableWss,
   [switch]$RequireWss
 )
 
@@ -164,7 +165,7 @@ $certPath = Join-Path $certRoot "$safeCertBase.pem"
 $keyPath = Join-Path $certRoot "$safeCertBase-key.pem"
 $pfxPath = Join-Path $certRoot "$safeCertBase.p12"
 $rootCaPath = Join-Path $certRoot "rootCA.pem"
-$wssRequested = -not $DisableWss
+$wssRequested = ($EnableWss -or $RequireWss) -and -not $DisableWss
 $wssReady = $false
 $wssUsesPfx = $false
 $lanIps = @(Get-PrivateLanIPv4)
@@ -243,8 +244,8 @@ if (-not $SkipLanHints) {
 
     $preferredUrl = "ws://$($lanIps[0])`:$Port$StreamPath"
     $encodedPreferredUrl = [System.Uri]::EscapeDataString($preferredUrl)
-    Write-Host "  Quick open from Mac browser:"
-    Write-Host "    http://localhost:3000/?msfsBridgeUrl=$encodedPreferredUrl"
+    Write-Host "  Quick open on anobservatory.com:"
+    Write-Host "    https://anobservatory.com/?msfsBridgeUrl=$encodedPreferredUrl"
     if ($wssReady) {
       $secureUrl = "wss://$wssPublicHost`:$WssPort$StreamPath"
       $encodedSecureUrl = [System.Uri]::EscapeDataString($secureUrl)
@@ -278,8 +279,7 @@ if (-not $SkipLanHints) {
     }
     else {
       Write-Host "  [WARN] Managed firewall rule is not present for TCP $WssPort." -ForegroundColor Yellow
-      Write-Host "  [HINT] If WSS clients cannot connect, run (Admin):" -ForegroundColor Yellow
-      Write-Host "    .\repair-elevated-v0.ps1 -Action OpenFirewall39002 -Port $WssPort" -ForegroundColor Yellow
+      Write-Host "  [HINT] If legacy WSS clients cannot connect, open TCP $WssPort manually." -ForegroundColor Yellow
     }
   }
 }
