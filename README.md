@@ -202,4 +202,6 @@ Output:
 - `dist/msfs-local-bridge-v0.2.14-self-contained.zip`
 - `dist/msfs-local-bridge-v0.2.14-lite.zip`
 
+The `-Version` value is also written to the executable assembly metadata and reported to anobservatory as `companionVersion`.
+
 This package excludes source `bin/obj` clutter and includes runtime bridge files needed by testers.

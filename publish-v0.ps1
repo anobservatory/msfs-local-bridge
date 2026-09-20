@@ -1,11 +1,16 @@
 param(
-  [string]$Version = "0.2.7",
+  [string]$Version = "0.2.14",
   [string]$Configuration = "Release",
   [ValidateSet("self-contained", "lite")]
   [string]$Package = "self-contained"
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Version -notmatch '^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)(?:[-+].+)?$') {
+  throw "Version must be a semantic version such as 0.2.14 or 0.2.15-preview.1."
+}
+$assemblyVersion = "$($Matches.major).$($Matches.minor).$($Matches.patch).0"
 
 $projectRoot = $PSScriptRoot
 $projectFile = Join-Path $projectRoot "MsfsLocalBridge.csproj"
@@ -51,6 +56,10 @@ dotnet publish $projectFile `
   -c $Configuration `
   -r win-x64 `
   --self-contained $isSelfContained `
+  -p:Version=$Version `
+  -p:AssemblyVersion=$assemblyVersion `
+  -p:FileVersion=$assemblyVersion `
+  -p:InformationalVersion=$Version `
   -o $publishDir
 
 New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
@@ -93,4 +102,3 @@ Write-Host "  1) Extract zip"
 Write-Host "  2) Run .\preflight-v0.ps1"
 Write-Host "  3) Run .\run-bridge.ps1"
 Write-Host "  4) Confirm netstat -ano | findstr "":39000"""
-
