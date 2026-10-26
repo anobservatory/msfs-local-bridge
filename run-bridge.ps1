@@ -20,6 +20,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Set-Location -LiteralPath $PSScriptRoot
 
 function Test-IsAdministrator {
   try {
