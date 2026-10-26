@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MSFS Local Bridge Host Console v2</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="host-loading">
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <p class="eyebrow">MSFS LOCAL BRIDGE</p>
+          <h1>Host Console</h1>
+        </div>
+        <div class="topbar-status">
+          <div class="chip state-active loading-chip">Checking host status</div>
+          <div class="chip" id="bridge-state-chip">Stopped</div>
+          <div class="chip" id="blocker-chip">2 blockers</div>
+          <div class="chip chip-warn" id="secure-chip">Browser access needed</div>
+          <nav class="tabbar" aria-label="Host console views">
+            <button class="tab-button active" type="button" data-tab-target="setup">Setup</button>
+            <button class="tab-button" type="button" data-tab-target="access">Access</button>
+          </nav>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel loading-panel" aria-live="polite">
+          <div class="loading-main">
+            <div class="loading-spinner" aria-hidden="true"></div>
+            <div>
+              <p class="section-label">Starting Host Console</p>
+              <h2>Checking host status...</h2>
+              <p class="panel-copy">This usually takes a moment.</p>
+            </div>
+          </div>
+          <div class="loading-next" aria-label="Next startup steps">
+            <p class="section-label">Next up</p>
+            <ol class="loading-steps">
+              <li>
+                <strong>Check host requirements</strong>
+                <span>Detect installed runtimes and browser access.</span>
+              </li>
+              <li>
+                <strong>Start the local bridge</strong>
+                <span>Prepare the local WebSocket stream for AO.</span>
+              </li>
+              <li>
+                <strong>Open AO with the bridge URL</strong>
+                <span>Hand off this session to anobservatory.com.</span>
+              </li>
+            </ol>
+          </div>
+        </section>
+
+        <section class="panel panel-primary">
+          <div class="current-step-main">
+            <div class="panel-head">
+              <div>
+                <p class="section-label">Current Step</p>
+                <h2 id="focus-title">Finish host setup</h2>
+              </div>
+              <div class="inline-state" id="focus-state">Setup needed</div>
+            </div>
+            <p class="panel-copy" id="focus-copy">
+              Install the required host runtimes before starting the bridge.
+            </p>
+            <div class="primary-actions">
+              <button class="button button-primary" id="focus-action-button" data-action="install-dotnet">
+                Install .NET Runtime
+              </button>
+              <button class="button button-secondary" data-action="stop-bridge" id="stop-bridge-button">
+                Stop
+              </button>
+              <button class="button button-secondary" data-action="restart-bridge" id="restart-bridge-button">
+                Restart
+              </button>
+              <button class="button button-secondary" type="button" id="open-diagnostics-button">
+                Diagnostics
+              </button>
+            </div>
+          </div>
+
+        </section>
+
+        <section class="panel panel-tab active" data-tab-panel="setup">
+          <div class="panel-head">
+            <div>
+              <p class="section-label">Host Checklist</p>
+              <h2>Prepare once, in order</h2>
+            </div>
+            <div class="inline-state" id="host-readiness-chip">Action</div>
+          </div>
+          <div class="checklist">
+            <article class="check-item">
+              <div class="check-order">1</div>
+              <div class="check-copy">
+                <strong>.NET Runtime</strong>
+                <p id="dotnet-current-note">Required on this host PC.</p>
+              </div>
+              <div class="check-meta">
+                <button class="button button-secondary button-compact check-action" data-action="install-dotnet" id="install-dotnet-button">
+                  Install
+                </button>
+              </div>
+            </article>
+
+            <article class="check-item">
+              <div class="check-order">2</div>
+              <div class="check-copy">
+                <strong>VC++ Runtime</strong>
+                <p id="vcredist-current-note">Needed for native bridge support.</p>
+              </div>
+              <div class="check-meta">
+                <button class="button button-secondary button-compact check-action" data-action="install-vcredist" id="install-vcredist-button">
+                  Install
+                </button>
+              </div>
+            </article>
+
+            <article class="check-item">
+              <div class="check-order">3</div>
+              <div class="check-copy">
+                <strong>Firewall</strong>
+                <p>Allow inbound TCP 39000 on the private network.</p>
+              </div>
+              <div class="check-meta">
+                <button class="button button-secondary button-compact check-action" data-action="open-firewall-rules" id="open-firewall-rules-button">
+                  Open Rule
+                </button>
+              </div>
+            </article>
+
+            <article class="check-item">
+              <div class="check-order">4</div>
+              <div class="check-copy">
+                <strong>Bridge Start</strong>
+                <p id="start-bridge-current-note">Start the bridge before opening AO.</p>
+              </div>
+              <div class="check-meta">
+                <button class="button button-primary button-compact check-action" data-action="start-bridge" id="start-bridge-button">
+                  Start Bridge
+                </button>
+              </div>
+            </article>
+
+            <article class="check-item">
+              <div class="check-order">5</div>
+              <div class="check-copy">
+                <strong>Open AO</strong>
+                <p id="open-ao-current-note">Open AO with this session's bridge URL. After that, use anobservatory.com normally.</p>
+              </div>
+              <div class="check-meta">
+                <button class="button button-primary button-compact check-action" data-action="open-bootstrap-page" id="open-ao-button">
+                  Open AO
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel panel-tab panel-composite" id="listener-panel" data-ready="false" data-tab-panel="access" hidden>
+          <div class="composite-topline">
+            <nav class="composite-tabbar" aria-label="Host status and AO access views" role="tablist">
+              <button
+                class="composite-tab-button active"
+                type="button"
+                data-composite-tab-target="host-status"
+                aria-controls="host-status-pane"
+                aria-selected="true"
+                role="tab"
+              >
+                Status
+              </button>
+              <button
+                class="composite-tab-button"
+                type="button"
+                data-composite-tab-target="open-ao"
+                aria-controls="open-ao-pane"
+                aria-selected="false"
+                role="tab"
+              >
+                Open AO
+              </button>
+            </nav>
+            <div class="inline-state" id="listener-readiness-pill">Locked</div>
+          </div>
+          <div class="composite-stack">
+            <section
+              class="composite-section composite-pane active"
+              id="host-status-pane"
+              data-composite-tab-panel="host-status"
+              role="tabpanel"
+            >
+              <div class="composite-head">
+                <p class="section-label">Status</p>
+                <h3 class="composite-title">Current host and browser access</h3>
+              </div>
+              <dl class="status-list">
+                <div class="status-row">
+                  <dt>Host IP</dt>
+                  <dd id="host-ip">Not available</dd>
+                </div>
+                <div class="status-row">
+                  <dt>Local stream</dt>
+                  <dd id="secure-stream">Not available</dd>
+                </div>
+                <div class="status-row">
+                  <dt>Bridge</dt>
+                  <dd id="bridge-state-detail">Setup needed</dd>
+                </div>
+                <div class="status-row">
+                  <dt>Browser access</dt>
+                  <dd id="secure-mode-detail">Local network permission needed</dd>
+                </div>
+                <div class="status-row">
+                  <dt>AO access</dt>
+                  <dd id="listener-access-detail">Locked</dd>
+                </div>
+                <div class="status-row">
+                  <dt>Last issue</dt>
+                  <dd id="last-issue">No issues</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section
+              class="composite-section composite-section-listener composite-pane"
+              id="open-ao-pane"
+              data-composite-tab-panel="open-ao"
+              role="tabpanel"
+              hidden
+            >
+              <div class="composite-head composite-head-spread">
+                <div>
+                  <p class="section-label">Open AO</p>
+                  <h3 class="composite-title">Ready after the bridge is running</h3>
+                </div>
+              </div>
+
+              <div class="field-stack">
+                <div class="field-block">
+                  <div class="field-head">
+                    <span class="field-label">AO Connect URL</span>
+                    <button class="button button-secondary button-compact field-copy-button" data-action="copy-link" id="copy-link-button">
+                      Copy
+                    </button>
+                  </div>
+                  <code id="secure-connect-url">Not available</code>
+                </div>
+                <div class="field-block">
+                  <div class="field-head">
+                    <span class="field-label">Local Bridge URL</span>
+                    <button class="button button-secondary button-compact field-copy-button" data-action="copy-bootstrap-url" id="copy-bootstrap-url-button">
+                      Copy
+                    </button>
+                  </div>
+                  <code id="bootstrap-url">Not available</code>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="drawer-scrim" id="drawer-scrim" hidden></div>
+    <aside class="diagnostics-drawer" id="diagnostics-drawer" aria-hidden="true">
+      <div class="drawer-head">
+        <div>
+          <p class="section-label">Diagnostics</p>
+          <h2>Log and support context</h2>
+        </div>
+        <button class="button button-secondary button-compact" type="button" id="close-diagnostics-button">
+          Close
+        </button>
+      </div>
+      <div class="diagnostics-actions">
+        <button class="button button-secondary button-compact" data-action="copy-log">Copy Log</button>
+        <button class="button button-secondary button-compact" data-action="clear-log">Clear</button>
+        <button class="button button-secondary button-compact" data-action="copy-diagnostics">Copy Diagnostics</button>
+      </div>
+      <pre class="log-view" id="runtime-log">[09:05:12] prerequisite-check: .NET runtimes x64 not found</pre>
+    </aside>
+
+    <aside class="preview-switcher" id="preview-switcher">
+      <span class="preview-label">Preview</span>
+      <button class="preview-button active" data-preview-state="setup-needed">Setup needed</button>
+      <button class="preview-button" data-preview-state="ready-to-start">Ready to start</button>
+      <button class="preview-button" data-preview-state="running">Running</button>
+    </aside>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

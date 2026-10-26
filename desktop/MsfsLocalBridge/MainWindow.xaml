@@ -1,0 +1,151 @@
+<Window x:Class="MsfsLocalBridge.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        mc:Ignorable="d"
+        Title="MSFS Local Bridge"
+        Icon="pack://application:,,,/Assets/ao_black.ico"
+        Width="600"
+        Height="960"
+        MinWidth="520"
+        MaxWidth="600"
+        MinHeight="420"
+        WindowStartupLocation="Manual"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        Background="#0B1420"
+        BorderThickness="0">
+    <Window.Resources>
+        <Style x:Key="WindowControlButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#D5E1F1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonChrome" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Background" Value="#132233" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Background" Value="#1A2D41" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CloseWindowControlButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource WindowControlButtonStyle}">
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#B63E46" />
+                    <Setter Property="Foreground" Value="#FFFFFF" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#923138" />
+                    <Setter Property="Foreground" Value="#FFFFFF" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            CornerRadius="24"
+                            GlassFrameThickness="0"
+                            ResizeBorderThickness="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Grid Background="#0B1420">
+        <Border x:Name="FrameBorder"
+                Margin="0"
+                BorderThickness="1"
+                BorderBrush="#1A2737"
+                Background="#0B1420"
+                CornerRadius="24"
+                SnapsToDevicePixels="True">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="40" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0"
+                        Background="#0B1420"
+                        BorderBrush="#152234"
+                        BorderThickness="0,0,0,1"
+                        MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Orientation="Horizontal"
+                                    VerticalAlignment="Center"
+                                    Margin="14,0,0,0">
+                            <Image Width="16"
+                                   Height="16"
+                                   Stretch="Uniform"
+                                   Source="pack://application:,,,/Assets/ao_white.png" />
+                            <TextBlock Margin="10,0,0,0"
+                                       VerticalAlignment="Center"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"
+                                       Foreground="#EAF2FF"
+                                       Text="MSFS Local Bridge" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal">
+                            <Button Style="{StaticResource WindowControlButtonStyle}"
+                                    Click="MinimizeButton_Click"
+                                    ToolTip="Minimize">
+                                <TextBlock FontFamily="Segoe MDL2 Assets"
+                                           FontSize="14"
+                                           Text="&#xE921;" />
+                            </Button>
+                            <Button x:Name="MaximizeButton"
+                                    Style="{StaticResource WindowControlButtonStyle}"
+                                    Click="MaximizeButton_Click"
+                                    ToolTip="Maximize"
+                                    Visibility="Collapsed">
+                                <TextBlock x:Name="MaximizeGlyph"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="14"
+                                           Text="&#xE922;" />
+                            </Button>
+                            <Button Style="{StaticResource CloseWindowControlButtonStyle}"
+                                    Click="CloseButton_Click"
+                                    ToolTip="Close">
+                                <TextBlock FontFamily="Segoe MDL2 Assets"
+                                           FontSize="14"
+                                           Text="&#xE8BB;" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <wv2:WebView2 Grid.Row="1"
+                              x:Name="AppBrowser" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
