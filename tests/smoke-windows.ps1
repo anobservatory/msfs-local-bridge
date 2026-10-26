@@ -47,6 +47,7 @@ $process = [Diagnostics.Process]::new()
 $process.StartInfo = $info
 $socket = [Net.WebSockets.ClientWebSocket]::new()
 $secondSocket = [Net.WebSockets.ClientWebSocket]::new()
+$discoverySocket = [Net.WebSockets.ClientWebSocket]::new()
 try {
   if (-not $process.Start()) { throw 'Bridge process did not start.' }
   $stdout = $process.StandardOutput.ReadToEndAsync()
@@ -63,6 +64,27 @@ try {
   $bindings = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction Stop)
   if (-not $bindings.Count -or @($bindings | Where-Object LocalAddress -ne '127.0.0.1').Count) { throw 'Default bridge must bind only to loopback.' }
   Write-Host 'PASS: Default listener accepts local connections only.'
+
+  $discoveryTimeout = [Threading.CancellationTokenSource]::new(5000)
+  try {
+    $discoverySocket.Options.SetRequestHeader('Origin', 'https://anobservatory.com')
+    $null = $discoverySocket.ConnectAsync([Uri]"ws://127.0.0.1:$port/local-connection", $discoveryTimeout.Token).GetAwaiter().GetResult()
+    $discoveryBuffer = [byte[]]::new(16384)
+    $discoveryMessage = [IO.MemoryStream]::new()
+    try {
+      do {
+        $received = $discoverySocket.ReceiveAsync([ArraySegment[byte]]::new($discoveryBuffer), $discoveryTimeout.Token).GetAwaiter().GetResult()
+        if ($received.MessageType -ne [Net.WebSockets.WebSocketMessageType]::Text) { throw 'Expected connection discovery JSON.' }
+        $discoveryMessage.Write($discoveryBuffer, 0, $received.Count)
+      } while (-not $received.EndOfMessage)
+      $connection = [Text.Encoding]::UTF8.GetString($discoveryMessage.ToArray()) | ConvertFrom-Json
+      if ($connection.source -ne 'msfs_local' -or $connection.version -ne 1 -or $connection.port -ne $port -or $connection.streamPath -ne '/stream') {
+        throw 'Local connection discovery returned an unexpected stream contract.'
+      }
+      if (-not @($connection.hostAddresses).Count) { throw 'Local connection discovery did not report any active IPv4 addresses.' }
+      Write-Host 'PASS: Loopback connection discovery works with sharing disabled and no flight required.'
+    } finally { $discoveryMessage.Dispose() }
+  } finally { $discoveryTimeout.Dispose() }
 
   $timeout = [Threading.CancellationTokenSource]::new(10000)
   try {
@@ -96,6 +118,7 @@ try {
 } finally {
   $socket.Dispose()
   $secondSocket.Dispose()
+  $discoverySocket.Dispose()
   if ($process.Id -and -not $process.HasExited) { $process.Kill($true); $process.WaitForExit() }
   $process.Dispose()
 }

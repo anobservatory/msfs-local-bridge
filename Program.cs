@@ -1,6 +1,8 @@
 ﻿using System.Globalization;
 using System.Net;
 using System.Net.WebSockets;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
@@ -60,6 +62,45 @@ var app = builder.Build();
 app.UseWebSockets(new WebSocketOptions
 {
   KeepAliveInterval = TimeSpan.FromSeconds(15),
+});
+
+// This loopback-only handshake lets AO recognize an old LAN address for this
+// very PC, even when sharing is disabled and no simulator flight is loaded.
+app.Map("/local-connection", async (HttpContext context, BridgeOptions options) =>
+{
+  if (context.Connection.RemoteIpAddress is not { } remote || !IPAddress.IsLoopback(remote))
+  {
+    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+    return;
+  }
+  if (!context.WebSockets.IsWebSocketRequest)
+  {
+    context.Response.StatusCode = StatusCodes.Status426UpgradeRequired;
+    return;
+  }
+
+  string[] addresses;
+  try
+  {
+    addresses = NetworkInterface.GetAllNetworkInterfaces()
+      .Where(adapter => adapter.OperationalStatus == OperationalStatus.Up)
+      .SelectMany(adapter => adapter.GetIPProperties().UnicastAddresses)
+      .Where(address => address.Address.AddressFamily == AddressFamily.InterNetwork)
+      .Select(address => address.Address.ToString()).Distinct().ToArray();
+  }
+  catch (NetworkInformationException)
+  {
+    addresses = [];
+  }
+
+  using var socket = await context.WebSockets.AcceptWebSocketAsync();
+  var bytes = JsonSerializer.SerializeToUtf8Bytes(new
+  {
+    source = "msfs_local", version = 1, streamPath = options.StreamPath,
+    port = options.Port, hostAddresses = addresses,
+  });
+  await socket.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, context.RequestAborted);
+  await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "discovery complete", context.RequestAborted);
 });
 
 app.MapGet("/", (BridgeOptions options, OwnshipSnapshotStore snapshotStore, RouteDiagnosticsState routeDiagnostics) => Results.Json(new
