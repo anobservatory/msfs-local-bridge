@@ -25,9 +25,22 @@ let hostResizeObserver = null;
 
 for (const button of actionButtons) {
   button.addEventListener("click", () => {
+    const action = button.dataset.action;
+    if (action === "open-device-access") {
+      activateTab("access");
+      activateCompositeTab("other-devices");
+      if (!lastHostState?.allowLanAccess && lastHostState?.canEnableSharing) {
+        postHostMessage({ type: "action", action: "enable-device-access" });
+      }
+      return;
+    }
+    if (action === "enable-device-access" || action === "open-firewall-rules") {
+      activateTab("access");
+      activateCompositeTab("other-devices");
+    }
     postHostMessage({
       type: "action",
-      action: button.dataset.action
+      action
     });
   });
 }
@@ -440,14 +453,14 @@ function applyState(state) {
 
   setActionButtonText("install-dotnet-button", state.dotNetButtonText);
   setActionButtonText("install-vcredist-button", state.vcRedistButtonText);
-  setActionButtonText("open-firewall-rules-button", state.sharingStatus === "Private network required" || state.sharingStatus === "Check network profile" ? "Check Network" : state.allowLanAccess && state.firewallStepText === "Ready" ? "Enabled" : "Enable Access");
+  setActionButtonText("open-firewall-rules-button", state.allowLanAccess ? "Manage Access" : state.canEnableSharing ? "Enable Access" : "Review Access");
   setActionButtonText("start-bridge-button", bridgeStartButtonLabel(state));
   setActionButtonText("open-ao-button", openAoButtonLabel(state));
 
   setDisabled("focus-action-button", isRecommendedActionDisabled(recommendation.action, state));
   setDisabled("install-dotnet-button", !state.canInstallDotNet);
   setDisabled("install-vcredist-button", !state.canInstallVcRedist);
-  setDisabled("open-firewall-rules-button", !state.canEnableSharing || (state.allowLanAccess && state.firewallStepText === "Ready"));
+  setDisabled("open-firewall-rules-button", false);
   setDisabled("start-bridge-button", !state.canStartBridge);
   setDisabled("open-ao-button", !state.canUseListenerSetup);
   setDisabled("stop-bridge-button", !state.canStopBridge);

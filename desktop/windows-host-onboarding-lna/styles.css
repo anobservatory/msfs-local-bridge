@@ -949,18 +949,24 @@ body.embedded-host .preview-switcher {
 .sharing-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 12px; }
 .host-notification { padding: 10px 14px; border: 1px solid #526d88; border-radius: 10px; color: #dceaff; background: #182b40; font-size: 12px; }
 #sharing-note { margin: 10px 0; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
-#sharing-connection:not([hidden]) { display: grid; grid-template-columns: 136px minmax(0, 1fr); gap: 14px; align-items: start; }
-#connection-qr { width: 136px; max-width: 100%; margin: 0; background: white; border-radius: 8px; }
+#sharing-connection { --sharing-qr-size: 136px; }
+#sharing-connection:not([hidden]) { display: grid; grid-template-columns: var(--sharing-qr-size) minmax(0, 1fr); gap: 14px; align-items: start; }
+#connection-qr { width: var(--sharing-qr-size); max-width: 100%; margin: 0; background: white; border-radius: 8px; }
 #connection-qr svg { display: block; width: 100%; height: auto; }
-.sharing-hint { margin: 8px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+.sharing-link { height: var(--sharing-qr-size); min-width: 0; grid-template-rows: 24px minmax(0, 1fr) auto; gap: 6px; }
+.sharing-link .field-head { min-height: 0; }
+.sharing-link .field-label { font-size: 11px; letter-spacing: 0.08em; }
+.sharing-link .button { min-height: 24px; padding: 0 9px; font-size: 12px; }
+.sharing-link code { min-height: 0; padding: 6px 8px; overflow: auto; font-size: 11px; line-height: 1.25; }
+.sharing-hint { margin: 0; color: var(--text-muted); font-size: 11px; line-height: 1.3; }
 
 @media (max-height: 560px) {
-  #sharing-connection:not([hidden]) { grid-template-columns: 120px minmax(0, 1fr); }
-  #connection-qr { width: 120px; }
+  #sharing-connection { --sharing-qr-size: 120px; }
 }
 
 @media (max-width: 420px) {
-  #sharing-connection:not([hidden]) { grid-template-columns: 112px minmax(0, 1fr); gap: 10px; }
-  #connection-qr { width: 112px; }
+  #sharing-connection { --sharing-qr-size: 112px; }
+  #sharing-connection:not([hidden]) { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .sharing-link { height: auto; grid-template-rows: auto auto auto; }
   #sharing-connection .field-head { flex-wrap: wrap; }
 }
