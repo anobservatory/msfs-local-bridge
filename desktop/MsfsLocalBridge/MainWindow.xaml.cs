@@ -334,11 +334,21 @@ public partial class MainWindow : Window
 
     private async Task SetDeviceAccessAsync(bool enabled)
     {
+        DiagnosticsResult? accessDiagnostics = null;
+        if (enabled)
+        {
+            var (networkDiagnostics, _) = await _diagnosticsService.GetAsync();
+            accessDiagnostics = networkDiagnostics;
+            if (!networkDiagnostics.Checks.Any(check => check.Id == "network.sharing_profile" && check.Status == "pass"))
+            {
+                await PostNotificationAsync("Sharing requires a Private network profile. In Windows network settings, choose Private only for a trusted home network, then enable access again. Local sync is still available.");
+                return;
+            }
+        }
         if (enabled && _currentState.FirewallStepText != "Ready")
         {
             // Recheck the actual rule: local-only mode deliberately labels it optional.
-            var (diagnostics, _) = await _diagnosticsService.GetAsync();
-            var ready = diagnostics.Checks.Any(check => check.Id == "network.firewall_private_39000" && check.Status == "pass");
+            var ready = accessDiagnostics!.Checks.Any(check => check.Id == "network.firewall_private_39000" && check.Status == "pass");
             if (!ready)
             {
                 try

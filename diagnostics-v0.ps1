@@ -281,6 +281,20 @@ else {
   Add-Check -Id "network.lan_ipv4" -Status "warn" -Message "No private LAN IPv4 detected." -RepairAction "Verify Windows device is connected to same LAN/Wi-Fi as viewer device."
 }
 
+try {
+  if (-not $lanIps.Count) { throw 'No LAN address is available.' }
+  $interface = Get-NetIPAddress -AddressFamily IPv4 -IPAddress $lanIps[0] -ErrorAction Stop | Select-Object -First 1
+  $profile = Get-NetConnectionProfile -InterfaceIndex $interface.InterfaceIndex -ErrorAction Stop | Select-Object -First 1
+  if ($null -eq $profile) { throw 'No network profile was found for the LAN interface.' }
+  if ($profile.NetworkCategory -eq 'Private') {
+    Add-Check -Id 'network.sharing_profile' -Status 'pass' -Message "LAN interface $($profile.InterfaceAlias) uses the Private network profile."
+  } else {
+    Add-Check -Id 'network.sharing_profile' -Status 'fail' -Message "LAN interface $($profile.InterfaceAlias) uses the $($profile.NetworkCategory) profile. The Bridge firewall rule allows Private networks only." -RepairAction 'For a trusted home network, open Windows network settings and choose Private. Do not mark a public or untrusted network as Private.'
+  }
+} catch {
+  Add-Check -Id 'network.sharing_profile' -Status 'warn' -Message 'Could not verify that the LAN interface uses the Private network profile.' -RepairAction 'Check the active connection in Windows network settings before enabling sharing.'
+}
+
 if (Test-ManagedFirewallRule -RulePort $Port) {
   Add-Check -Id "network.firewall_private_$Port" -Status "pass" -Message "Managed firewall rule present for inbound TCP $Port."
 }

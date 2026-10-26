@@ -59,6 +59,21 @@ try
     Require(!state.CanShareConnection && state.FirewallStepText == "Optional", "No sharing link before access is enabled.");
     state = new AppStateBuilder().Build(diagnostics, "{}", session, prerequisites, allowLanAccess: true);
     Require(!state.CanStartBridge && state.BlockerText == "1 blocker", "Enabled LAN access requires its private firewall rule.");
+    diagnostics.Checks.Single(check => check.Id == "network.firewall_private_39000").Status = "pass";
+    diagnostics.Checks.Single(check => check.Id == "network.lan_ipv4").Status = "pass";
+    diagnostics.Checks.Single(check => check.Id == "network.lan_ipv4").Message = "Private LAN IPv4 detected: 192.168.1.8 (sample: ws://192.168.1.8:39000/stream)";
+    var profileCheck = new DiagnosticsCheck { Id = "network.sharing_profile", Status = "fail", Message = "LAN interface Wi-Fi uses the Public profile. The Bridge firewall rule allows Private networks only." };
+    diagnostics.Checks.Add(profileCheck);
+    state = new AppStateBuilder().Build(diagnostics, "{}", session, prerequisites, allowLanAccess: true);
+    Require(state.SharingStatus == "Private network required" && !state.CanEnableSharing && !state.CanShareConnection,
+        "An existing Private firewall rule cannot make a Public LAN ready for sharing.");
+    Require(state.CanStartBridge, "A sharing profile mismatch does not prevent local bridge startup.");
+    profileCheck.Status = "pass";
+    state = new AppStateBuilder().Build(diagnostics, "{}", session, prerequisites, allowLanAccess: true);
+    Require(state.CanEnableSharing && state.SharingStatus == "Start Bridge", "A verified Private profile permits the sharing flow.");
+    profileCheck.Status = "warn";
+    state = new AppStateBuilder().Build(diagnostics, "{}", session, prerequisites);
+    Require(!state.CanEnableSharing && state.SharingStatus == "Check network profile", "An unknown profile is not advertised as ready.");
 
     var bundled = Path.Combine(output, "bridge");
     CreatePayload(bundled);
