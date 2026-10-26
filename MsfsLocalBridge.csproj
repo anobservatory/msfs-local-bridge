@@ -11,7 +11,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>MsfsLocalBridge</RootNamespace>
-    <DefaultItemExcludes>$(DefaultItemExcludes);**\bin\**;**\obj\**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**\bin\**;**\obj\**;desktop\**;tests\**;dist\**;artifacts\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <Target Name="EnsureSimConnectAssemblies" BeforeTargets="ResolveReferences">
@@ -36,6 +36,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Remove="NuGet.Config" />
     <None Include="lib\Microsoft.FlightSimulator.SimConnect.dll" CopyToOutputDirectory="PreserveNewest" />
     <None Include="lib\SimConnect.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

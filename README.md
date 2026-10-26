@@ -1,6 +1,43 @@
 # MSFS Local Bridge (Windows)
 
-Windows bridge for streaming MSFS SimConnect telemetry to anobservatory.
+Windows desktop app and bridge for streaming MSFS SimConnect telemetry to anobservatory.
+
+This repository now includes the desktop host under `desktop/`, the bridge
+runtime at the root, and the native SimConnect worker under `workers/`.
+The former `anobservatory/msfs-local-bridge-desktop` history is preserved by
+the subtree import. A sibling desktop checkout is no longer required.
+
+## Desktop App (Recommended)
+
+1. Extract the Windows desktop portable ZIP into a folder.
+2. Run `MsfsLocalBridge.exe` at the top of the extracted folder.
+3. Complete the host checks, then choose **Start Bridge** and **Open AO**.
+4. Allow browser local network access when requested.
+
+Keep the package together: `bridge/` contains the telemetry runtime and
+`resources/host-console/` contains the desktop UI. The `lite` package requires
+.NET Desktop Runtime and ASP.NET Core Runtime matching the target framework,
+plus VC++ and WebView2 when missing. Normal use does not require a terminal.
+
+Build from this repository with a Windows .NET SDK:
+
+```powershell
+dotnet build .\MsfsLocalBridge.Windows.slnx -c Release -m:1
+dotnet run --project .\tests\WorkspaceChecks\WorkspaceChecks.csproj -c Release --no-build
+.\publish-windows.ps1 -Package lite
+```
+
+The portable ZIP and SHA256 file are written to `dist/windows/`. To include
+.NET, use `-Package self-contained`. To build and include the optional native
+worker with MSVC/CMake installed, also pass `-BuildNativeWorker`. Without a
+worker binary the desktop app retains the existing embedded SimConnect mode.
+
+See [the rebuild checklist](docs/post-format-rebuild-checklist.md) for source
+build requirements and package verification. The web app remains in
+`anobservatory/anobservatory`; this consolidation preserves the current LAN
+connection URL and onboarding behavior.
+
+## Manual Bridge Usage
 
 - Local stream endpoint: `ws://<WINDOWS_IP>:39000/stream`
 - Browser entry point: `https://anobservatory.com/?msfsBridgeUrl=ws%3A%2F%2F<WINDOWS_IP>%3A39000%2Fstream`
@@ -9,7 +46,7 @@ Windows bridge for streaming MSFS SimConnect telemetry to anobservatory.
 
 If you are flying at KJFK but the app shows a fixed C172 around KSFO, a mock sender is probably running. This bridge is the real SimConnect sender.
 
-## Quick Start
+### Quick Start
 
 1. Extract the Windows release zip.
 2. Open normal PowerShell, not Administrator.

@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$BindHost = "0.0.0.0",
   [int]$Port = 39000,
   [int]$WssPort = 39002,
@@ -174,11 +174,11 @@ $wssPublicHost = $LocalDomain
 $wssDirectIpHost = $bootstrapHostIp
 
 if ($wssRequested) {
-  if (Test-Path $pfxPath) {
+  if (Test-Path -LiteralPath $pfxPath) {
     $wssReady = $true
     $wssUsesPfx = $true
   }
-  elseif ((Test-Path $certPath) -and (Test-Path $keyPath)) {
+  elseif ((Test-Path -LiteralPath $certPath) -and (Test-Path -LiteralPath $keyPath)) {
     $wssReady = $true
     $wssUsesPfx = $false
   }
@@ -292,19 +292,19 @@ $dllPath = Join-Path $PSScriptRoot "MsfsLocalBridge.dll"
 $projectPath = Join-Path $PSScriptRoot "MsfsLocalBridge.csproj"
 
 # Prefer release executable when present (packaged zip scenario).
-if (Test-Path $exePath) {
+if (Test-Path -LiteralPath $exePath) {
   & $exePath
   exit $LASTEXITCODE
 }
 
 # Fallback to source project execution.
-if (Test-Path $projectPath) {
+if (Test-Path -LiteralPath $projectPath) {
   dotnet run --project $projectPath
   exit $LASTEXITCODE
 }
 
 # Last fallback for runtime-only directory without project file.
-if (Test-Path $dllPath) {
+if (Test-Path -LiteralPath $dllPath) {
   dotnet $dllPath
   exit $LASTEXITCODE
 }

@@ -10,8 +10,11 @@
     <AssemblyName>MsfsLocalBridge</AssemblyName>
     <RootNamespace>MsfsLocalBridge</RootNamespace>
     <Product>MSFS Local Bridge</Product>
+    <Version>0.2.14</Version>
     <ApplicationIcon>..\ao_black.ico</ApplicationIcon>
-    <BundledBridgeProject>..\..\msfs-local-bridge\MsfsLocalBridge.csproj</BundledBridgeProject>
+    <BridgeRepositoryRoot>$(MSBuildThisFileDirectory)..\..\</BridgeRepositoryRoot>
+    <BundledBridgeProject>$(BridgeRepositoryRoot)MsfsLocalBridge.csproj</BundledBridgeProject>
+    <BundledBridgeSelfContained Condition="'$(BundledBridgeSelfContained)' == ''">false</BundledBridgeSelfContained>
   </PropertyGroup>
 
   <ItemGroup>
@@ -42,23 +45,23 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\..\msfs-local-bridge\workers\simconnect-native\dist\**\*">
+    <Content Include="$(BridgeRepositoryRoot)workers\simconnect-native\dist\**\*">
       <Link>bridge\workers\simconnect-native\dist\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\msfs-local-bridge\diagnostics-v0.ps1">
+    <Content Include="$(BridgeRepositoryRoot)diagnostics-v0.ps1">
       <Link>bridge\diagnostics-v0.ps1</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\msfs-local-bridge\repair-elevated-v0.ps1">
+    <Content Include="$(BridgeRepositoryRoot)repair-elevated-v0.ps1">
       <Link>bridge\repair-elevated-v0.ps1</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\msfs-local-bridge\run-bridge.ps1">
+    <Content Include="$(BridgeRepositoryRoot)run-bridge.ps1">
       <Link>bridge\run-bridge.ps1</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\msfs-local-bridge\preflight-v0.ps1">
+    <Content Include="$(BridgeRepositoryRoot)preflight-v0.ps1">
       <Link>bridge\preflight-v0.ps1</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
@@ -69,11 +72,12 @@
       <BundledBridgePublishDir>$(IntermediateOutputPath)bridge-publish\</BundledBridgePublishDir>
     </PropertyGroup>
 
-    <Exec Command="dotnet publish &quot;$(BundledBridgeProject)&quot; -c $(Configuration) -r win-x64 --self-contained false -o &quot;$(BundledBridgePublishDir)&quot;" />
+    <RemoveDir Directories="$(BundledBridgePublishDir)" />
+    <Exec Command="dotnet publish &quot;$(BundledBridgeProject)&quot; -c $(Configuration) -r win-x64 --self-contained $(BundledBridgeSelfContained) -p:Version=$(Version) -p:AssemblyVersion=$(AssemblyVersion) -p:FileVersion=$(FileVersion) -p:InformationalVersion=$(InformationalVersion) -p:NuGetAudit=false -o &quot;$(BundledBridgePublishDir)&quot;" />
 
     <ItemGroup>
       <BundledBridgePublishedFiles Include="$(BundledBridgePublishDir)**\*" />
-      <BundledBridgeLibFiles Include="..\..\msfs-local-bridge\lib\**\*" />
+      <BundledBridgeLibFiles Include="$(BridgeRepositoryRoot)lib\*.dll" />
     </ItemGroup>
 
     <Copy
@@ -97,7 +101,7 @@
 
     <ItemGroup>
       <BundledBridgePublishedFiles Include="$(BundledBridgePublishDir)**\*" />
-      <BundledBridgeLibFiles Include="..\..\msfs-local-bridge\lib\**\*" />
+      <BundledBridgeLibFiles Include="$(BridgeRepositoryRoot)lib\*.dll" />
     </ItemGroup>
 
     <Copy

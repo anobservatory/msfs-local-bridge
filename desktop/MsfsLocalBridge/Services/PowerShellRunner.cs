@@ -78,7 +78,7 @@ internal sealed class PowerShellRunner
         var startInfo = new ProcessStartInfo
         {
             FileName = _powerShellPath,
-            Arguments = arguments,
+            Arguments = "-NoLogo -NoProfile -NonInteractive " + arguments,
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = redirectIo,
             RedirectStandardError = redirectIo,

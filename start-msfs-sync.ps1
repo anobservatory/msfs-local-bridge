@@ -24,7 +24,7 @@ $preflightScript = Join-Path $PSScriptRoot "preflight-v0.ps1"
 $setupCertScript = Join-Path $PSScriptRoot "setup-wss-cert-v0.ps1"
 $runScript = Join-Path $PSScriptRoot "run-bridge.ps1"
 
-if (-not (Test-Path $runScript)) {
+if (-not (Test-Path -LiteralPath $runScript)) {
   throw "Missing required script: $runScript"
 }
 
@@ -39,7 +39,7 @@ $keyPath = Join-Path $certRoot "$safeCertBase-key.pem"
 $wssRequested = ($EnableWss -or $RequireWss) -and -not $DisableWss
 
 if (-not $SkipPreflight) {
-  if (-not (Test-Path $preflightScript)) {
+  if (-not (Test-Path -LiteralPath $preflightScript)) {
     throw "Missing required script: $preflightScript"
   }
 
@@ -68,7 +68,7 @@ else {
 
 Write-Host ""
 if ($wssRequested) {
-  if ((Test-Path $certPath) -and (Test-Path $keyPath)) {
+  if ((Test-Path -LiteralPath $certPath) -and (Test-Path -LiteralPath $keyPath)) {
     Write-Host "Step 2/3: WSS certificate already present."
   }
   elseif ($SkipCertSetup) {
@@ -78,7 +78,7 @@ if ($wssRequested) {
     }
   }
   else {
-    if (-not (Test-Path $setupCertScript)) {
+    if (-not (Test-Path -LiteralPath $setupCertScript)) {
       throw "Missing required script: $setupCertScript"
     }
     Write-Host "Step 2/3: Creating WSS certificate..."

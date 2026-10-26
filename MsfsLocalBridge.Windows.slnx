@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="MsfsLocalBridge.csproj" />
+  <Project Path="desktop/MsfsLocalBridge/MsfsLocalBridge.Desktop.csproj" />
+  <Project Path="tests/WorkspaceChecks/WorkspaceChecks.csproj" />
+</Solution>

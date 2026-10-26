@@ -1,142 +1,83 @@
-﻿# Post-Format Rebuild Checklist
+# Windows Rebuild Checklist
 
-This checklist is for rebuilding the MSFS bridge stack after reinstalling Windows or moving to a new machine.
+Build the desktop app, bridge, and optional native SimConnect worker from the
+single `anobservatory/msfs-local-bridge` checkout. Its folder name and parent
+folder are unrestricted. The web application remains a separate repository.
 
-## Repositories
+## Developer prerequisites
 
-Clone both repositories into the same parent folder:
+- Windows x64, Git, and the .NET SDK for the projects' target framework.
+- For native worker builds: MSVC, Windows SDK, and CMake (Desktop development
+  with C++ in Visual Studio Build Tools).
+- SimConnect DLLs in `lib/`: `Microsoft.FlightSimulator.SimConnect.dll` and
+  `SimConnect.dll`. Keep these files in the checkout and release payload.
 
-- `C:\Users\A\Desktop\GitHub\msfs-local-bridge`
-- `C:\Users\A\Desktop\GitHub\msfs-local-bridge-desktop`
+## Build and package
 
-The desktop app looks for the bridge repo next to it, so keep both folders under the same root when possible.
-
-## Required Installs
-
-Install these tools first:
-
-1. Git
-2. .NET 10 SDK
-3. Visual Studio 2022 Build Tools
-
-Build Tools workloads/components:
-
-- Desktop development with C++
-- MSVC build tools
-- Windows SDK
-- CMake tools for Windows
-
-## MSFS SimConnect Files
-
-Before building `msfs-local-bridge`, restore these files into `lib\`:
-
-- `Microsoft.FlightSimulator.SimConnect.dll`
-- `SimConnect.dll`
-
-Expected location:
-
-- `C:\Users\A\Desktop\GitHub\msfs-local-bridge\lib`
-
-## Build Order
-
-Build in this order:
-
-1. Native SimConnect worker
-2. Bridge package/output
-3. Desktop app
-
-## 1) Build The Native Worker
-
-Project path:
-
-- `C:\Users\A\Desktop\GitHub\msfs-local-bridge\workers\simconnect-native`
-
-Typical flow:
+From the repository root:
 
 ```powershell
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release
-New-Item -ItemType Directory -Force -Path .\dist | Out-Null
-Copy-Item .\build\Release\msfs-simconnect-worker.exe .\dist\msfs-simconnect-worker.exe -Force
+dotnet build .\MsfsLocalBridge.Windows.slnx -c Release -m:1
+dotnet run --project .\tests\WorkspaceChecks\WorkspaceChecks.csproj -c Release --no-build
+.\publish-windows.ps1 -Package lite
 ```
 
-Expected output:
+The desktop build publishes the root bridge project into its own `bridge/`
+payload. It has no dependency on another repository or its build output.
 
-- `C:\Users\A\Desktop\GitHub\msfs-local-bridge\workers\simconnect-native\dist\msfs-simconnect-worker.exe`
-
-## 2) Build The Bridge
-
-Project path:
-
-- `C:\Users\A\Desktop\GitHub\msfs-local-bridge`
-
-Build/package script:
+For the optional native worker:
 
 ```powershell
-.\publish-v0.ps1
+.\publish-windows.ps1 -Package lite -BuildNativeWorker
 ```
 
-Expected packaged output:
+The desktop selects the worker when the packaged executable exists, otherwise
+it uses the existing embedded SimConnect mode. Building native code requires
+the C++ toolchain; the .NET-only fallback does not.
 
-- `C:\Users\A\Desktop\GitHub\msfs-local-bridge\dist`
+Outputs are under `dist/windows/`: a runnable folder, portable ZIP, and SHA256
+file. The desktop entry point is the top-level `MsfsLocalBridge.exe`; the
+similarly named executable inside `bridge/` is the telemetry runtime.
 
-For local development, a direct build also works:
+`-Package self-contained` includes .NET for both processes. The default `lite`
+package keeps the existing system-runtime installation model. These modes do
+not remove native VC++ or WebView2 requirements.
+
+The root `publish-v0.ps1` remains the advanced/manual bridge-only publisher.
+It does not produce the desktop app.
+
+## Verify the extracted portable package
+
+Use PowerShell 7 for the integration smoke script:
 
 ```powershell
-dotnet build .\MsfsLocalBridge.csproj -c Release
+.\tests\smoke-windows.ps1 -PackageDirectory '<extracted portable folder>'
+.\tests\smoke-windows.ps1 -PackageDirectory '<extracted portable folder>' -TestWorkerPath '.\tests\WorkspaceChecks\bin\Release\net10.0-windows\WorkspaceChecks.exe'
 ```
 
-## 3) Build The Desktop App
+The first check launches the packaged embedded bridge on a temporary loopback
+port and checks HTTP health and a WebSocket handshake. The second sends clearly
+identified synthetic IPC telemetry through the packaged bridge and verifies
+its version-1 stream. The fixture is never copied into the release package.
+Neither check proves an actual MSFS flight or native SimConnect connection.
 
-Project path:
+Open the extracted desktop app and confirm:
 
-- `C:\Users\A\Desktop\GitHub\msfs-local-bridge-desktop`
+1. Host checks finish and the console resources load.
+2. Start Bridge opens the stream; HTTP health answers on port 39000.
+3. Restart Bridge restores the stream.
+4. Stop Bridge and closing the desktop app release the stream/processes.
+5. Open AO uses the generated LAN connect link and browser permission flow.
 
-Build command:
+Run with MSFS in a loaded cockpit to verify actual aircraft position and
+telemetry. Separately verify another LAN device and permission/firewall failure
+recovery before a public release. The current default is plain local-network
+WebSocket on port 39000; certificates and port 39002 are not required.
 
-```powershell
-dotnet build .\MockupShell\MockupShell.csproj -c Release
-```
+## Repository migration
 
-Expected output:
-
-- `C:\Users\A\Desktop\GitHub\msfs-local-bridge-desktop\MockupShell\bin\Release\net10.0-windows\MockupShell.exe`
-
-## First Runtime Check
-
-After building:
-
-1. Start the desktop app or run `.\run-bridge.ps1`
-2. Confirm worker mode is selected
-3. Confirm `https://ao.home.arpa:39002/` opens
-4. Open `https://anobservatory.com/?msfsBridgeUrl=wss%3A%2F%2Fao.home.arpa%3A39002%2Fstream`
-
-Expected bridge status:
-
-- bridge starts in `worker` mode
-- WSS uses `ao.home.arpa`
-- browser can load the local HTTPS status page
-
-## Certificate Setup
-
-If WSS certificates are missing, run:
-
-```powershell
-.\setup-wss-cert-v0.ps1
-```
-
-If listener bootstrap needs hosts mapping, run the bootstrap script from an elevated PowerShell window.
-
-## Ask Codex For This
-
-If you want this rebuilt later, a good prompt is:
-
-```text
-Rebuild msfs-local-bridge and msfs-local-bridge-desktop outputs, including the native SimConnect worker and release artifacts.
-```
-
-If you also want packaging, say:
-
-```text
-Generate the bridge zip package and desktop release outputs again.
-```
+The desktop source was imported under `desktop/` with its Git history intact.
+Its project is now `desktop/MsfsLocalBridge/MsfsLocalBridge.Desktop.csproj`.
+After integration is accepted on the default branch, retain the old desktop
+repository as a read-only archive with a link to this repository. Do not delete
+its history or release links as part of a local build.

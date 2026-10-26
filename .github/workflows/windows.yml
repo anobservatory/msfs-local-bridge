@@ -1,0 +1,48 @@
+name: Windows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build native SimConnect worker
+        shell: pwsh
+        run: |
+          cmake -S workers/simconnect-native -B workers/simconnect-native/build -A x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build workers/simconnect-native/build --config Release
+          exit $LASTEXITCODE
+      - name: Build unified solution
+        run: dotnet build MsfsLocalBridge.Windows.slnx -c Release -m:1 -p:NuGetAudit=false
+      - name: Check workspace discovery
+        run: dotnet run --project tests/WorkspaceChecks/WorkspaceChecks.csproj -c Release --no-build
+      - name: Publish portable desktop app
+        shell: pwsh
+        run: ./publish-windows.ps1 -Package lite
+      - name: Verify extracted package and IPC telemetry
+        shell: pwsh
+        run: |
+          $zips = @(Get-ChildItem dist/windows -Filter '*.zip')
+          if ($zips.Count -ne 1) { throw 'Expected exactly one portable ZIP.' }
+          $zip = $zips[0]
+          $extracted = Join-Path $env:RUNNER_TEMP 'AO portable smoke'
+          [IO.Compression.ZipFile]::ExtractToDirectory($zip.FullName, $extracted)
+          ./tests/smoke-windows.ps1 -PackageDirectory $extracted
+          ./tests/smoke-windows.ps1 -PackageDirectory $extracted -TestWorkerPath tests/WorkspaceChecks/bin/Release/net10.0-windows/WorkspaceChecks.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msfs-local-bridge-windows-x64-lite
+          path: |
+            dist/windows/*.zip
+            dist/windows/*.sha256
