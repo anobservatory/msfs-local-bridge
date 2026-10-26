@@ -1,4 +1,4 @@
-﻿param(
+param(
   [int]$Port = 39000,
   [ValidateSet("Text", "Json")]
   [string]$Format = "Text"
@@ -150,21 +150,21 @@ function Get-CountByStatus {
 $projectRoot = $PSScriptRoot
 $projectFile = Join-Path $projectRoot "MsfsLocalBridge.csproj"
 $releaseExe = Join-Path $projectRoot "MsfsLocalBridge.exe"
-$releaseLayout = (Test-Path $releaseExe) -and (-not (Test-Path $projectFile))
+$releaseLayout = (Test-Path -LiteralPath $releaseExe) -and (-not (Test-Path -LiteralPath $projectFile))
 
 $managedDll = Join-Path $projectRoot "lib\Microsoft.FlightSimulator.SimConnect.dll"
 $nativeDll = Join-Path $projectRoot "lib\SimConnect.dll"
 $managedRootDll = Join-Path $projectRoot "Microsoft.FlightSimulator.SimConnect.dll"
 $nativeRootDll = Join-Path $projectRoot "SimConnect.dll"
 
-if (Test-Path $managedDll) {
+if (Test-Path -LiteralPath $managedDll) {
   Add-Check -Id "simconnect.managed_dll" -Status "pass" -Message "Managed SimConnect DLL found: $managedDll"
 }
 else {
   Add-Check -Id "simconnect.managed_dll" -Status "fail" -Message "Managed SimConnect DLL missing: $managedDll" -RepairAction "Copy Microsoft.FlightSimulator.SimConnect.dll into lib folder."
 }
 
-if (Test-Path $nativeDll) {
+if (Test-Path -LiteralPath $nativeDll) {
   Add-Check -Id "simconnect.native_dll" -Status "pass" -Message "Native SimConnect DLL found: $nativeDll"
 }
 else {
@@ -172,14 +172,14 @@ else {
 }
 
 if ($releaseLayout) {
-  if (Test-Path $managedRootDll) {
+  if (Test-Path -LiteralPath $managedRootDll) {
     Add-Check -Id "release.root_managed_dll" -Status "pass" -Message "Release root managed DLL found: $managedRootDll"
   }
   else {
     Add-Check -Id "release.root_managed_dll" -Status "fail" -Message "Release root managed DLL missing: $managedRootDll" -RepairAction "Copy managed DLL from lib to release root."
   }
 
-  if (Test-Path $nativeRootDll) {
+  if (Test-Path -LiteralPath $nativeRootDll) {
     Add-Check -Id "release.root_native_dll" -Status "pass" -Message "Release root native DLL found: $nativeRootDll"
   }
   else {

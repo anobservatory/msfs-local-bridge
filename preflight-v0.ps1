@@ -1,4 +1,4 @@
-﻿param(
+param(
   [int]$Port = 39000,
   [switch]$Strict
 )
@@ -36,7 +36,7 @@ function Test-RequiredFile {
     [string]$Label
   )
 
-  if (Test-Path $Path) {
+  if (Test-Path -LiteralPath $Path) {
     Write-Check -Status PASS -Message "$Label found: $Path"
   }
   else {
@@ -192,7 +192,7 @@ Test-RequiredFile -Path $nativeDll -Label "Native SimConnect DLL"
 
 $projectFile = Join-Path $PSScriptRoot "MsfsLocalBridge.csproj"
 $releaseExe = Join-Path $PSScriptRoot "MsfsLocalBridge.exe"
-$releaseLayout = (Test-Path $releaseExe) -and (-not (Test-Path $projectFile))
+$releaseLayout = (Test-Path -LiteralPath $releaseExe) -and (-not (Test-Path -LiteralPath $projectFile))
 
 $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
 if ($releaseLayout) {
@@ -226,7 +226,7 @@ $outputRoots = @(
   (Join-Path $PSScriptRoot "bin\Release\net8.0-windows\win-x64")
 )
 
-$existingOutput = $outputRoots | Where-Object { Test-Path $_ } | Select-Object -First 1
+$existingOutput = $outputRoots | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if ($null -eq $existingOutput) {
   Write-Check -Status PASS -Message "No build output found yet (normal before first source run or when using release zip)"
 }

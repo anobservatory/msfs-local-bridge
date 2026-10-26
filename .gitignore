@@ -6,3 +6,8 @@ apps/.DS_Store
 *.p12
 workers/simconnect-native/build/
 workers/simconnect-native/dist/
+dist/
+artifacts/
+.dotnet-home/
+.nuget/
+.appdata/

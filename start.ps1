@@ -21,7 +21,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $starter = Join-Path $PSScriptRoot "start-msfs-sync.ps1"
-if (-not (Test-Path $starter)) {
+if (-not (Test-Path -LiteralPath $starter)) {
   throw "Missing required script: $starter"
 }
 

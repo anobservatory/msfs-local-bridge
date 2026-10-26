@@ -1,0 +1,129 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <NuGetAudit>false</NuGetAudit>
+    <AssemblyName>MsfsLocalBridge</AssemblyName>
+    <RootNamespace>MsfsLocalBridge</RootNamespace>
+    <Product>MSFS Local Bridge</Product>
+    <Version>0.2.14</Version>
+    <ApplicationIcon>..\ao_black.ico</ApplicationIcon>
+    <BridgeRepositoryRoot>$(MSBuildThisFileDirectory)..\..\</BridgeRepositoryRoot>
+    <BundledBridgeProject>$(BridgeRepositoryRoot)MsfsLocalBridge.csproj</BundledBridgeProject>
+    <BundledBridgeSelfContained Condition="'$(BundledBridgeSelfContained)' == ''">false</BundledBridgeSelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="..\ao.ico">
+      <Link>Assets\ao.ico</Link>
+    </Resource>
+    <Resource Include="..\ao_black.ico">
+      <Link>Assets\ao_black.ico</Link>
+    </Resource>
+    <Resource Include="..\icon\ao_white.png">
+      <Link>Assets\ao_white.png</Link>
+    </Resource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\windows-host-onboarding-lna\**\*">
+      <Link>resources\host-console\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\README.txt">
+      <Link>README.txt</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="$(BridgeRepositoryRoot)workers\simconnect-native\dist\**\*">
+      <Link>bridge\workers\simconnect-native\dist\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="$(BridgeRepositoryRoot)diagnostics-v0.ps1">
+      <Link>bridge\diagnostics-v0.ps1</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="$(BridgeRepositoryRoot)repair-elevated-v0.ps1">
+      <Link>bridge\repair-elevated-v0.ps1</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="$(BridgeRepositoryRoot)run-bridge.ps1">
+      <Link>bridge\run-bridge.ps1</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="$(BridgeRepositoryRoot)preflight-v0.ps1">
+      <Link>bridge\preflight-v0.ps1</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <Target Name="PublishBundledBridge" AfterTargets="Build">
+    <PropertyGroup>
+      <BundledBridgePublishDir>$(IntermediateOutputPath)bridge-publish\</BundledBridgePublishDir>
+    </PropertyGroup>
+
+    <RemoveDir Directories="$(BundledBridgePublishDir)" />
+    <Exec Command="dotnet publish &quot;$(BundledBridgeProject)&quot; -c $(Configuration) -r win-x64 --self-contained $(BundledBridgeSelfContained) -p:Version=$(Version) -p:AssemblyVersion=$(AssemblyVersion) -p:FileVersion=$(FileVersion) -p:InformationalVersion=$(InformationalVersion) -p:NuGetAudit=false -o &quot;$(BundledBridgePublishDir)&quot;" />
+
+    <ItemGroup>
+      <BundledBridgePublishedFiles Include="$(BundledBridgePublishDir)**\*" />
+      <BundledBridgeLibFiles Include="$(BridgeRepositoryRoot)lib\*.dll" />
+    </ItemGroup>
+
+    <Copy
+      SourceFiles="@(BundledBridgePublishedFiles)"
+      DestinationFiles="@(BundledBridgePublishedFiles->'$(OutDir)bridge\%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+    <Copy
+      SourceFiles="@(BundledBridgeLibFiles)"
+      DestinationFiles="@(BundledBridgeLibFiles->'$(OutDir)bridge\%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+    <Copy
+      SourceFiles="@(BundledBridgeLibFiles)"
+      DestinationFiles="@(BundledBridgeLibFiles->'$(OutDir)bridge\lib\%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyBundledBridgeToPublishDir" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
+    <PropertyGroup>
+      <BundledBridgePublishDir>$(IntermediateOutputPath)bridge-publish\</BundledBridgePublishDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <BundledBridgePublishedFiles Include="$(BundledBridgePublishDir)**\*" />
+      <BundledBridgeLibFiles Include="$(BridgeRepositoryRoot)lib\*.dll" />
+    </ItemGroup>
+
+    <Copy
+      SourceFiles="@(BundledBridgePublishedFiles)"
+      DestinationFiles="@(BundledBridgePublishedFiles->'$(PublishDir)bridge\%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+    <Copy
+      SourceFiles="@(BundledBridgeLibFiles)"
+      DestinationFiles="@(BundledBridgeLibFiles->'$(PublishDir)bridge\%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+    <Copy
+      SourceFiles="@(BundledBridgeLibFiles)"
+      DestinationFiles="@(BundledBridgeLibFiles->'$(PublishDir)bridge\lib\%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>
+
+
+
+
+
+
+
+
