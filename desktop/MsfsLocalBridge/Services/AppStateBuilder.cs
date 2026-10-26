@@ -117,7 +117,7 @@ internal sealed class AppStateBuilder
                 : !firewallReady ? "Private network firewall access needs repair. Enable access again to repair it."
                 : !hasLocalBridgeAddress ? "No LAN address found. Connect the flight PC to your private network."
                 : !session.IsRunning ? "Access enabled. Start Bridge to show the QR and connection link."
-                : "On a device on the same private network, scan the QR or open the connection link once. Allow browser local network access if asked. Then visit anobservatory.com normally. If the host address changes, use a fresh link.",
+                : "Scan the QR or open the link on a device on the same private network. Allow browser local network access if asked.",
             LocalBridgeUrl = localBridgeUrl,
             BootstrapUrl = bootstrapUrl,
             RuntimeLog = string.IsNullOrWhiteSpace(session.RuntimeLog) ? diagnosticsJson : session.RuntimeLog,
