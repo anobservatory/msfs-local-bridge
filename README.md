@@ -29,6 +29,13 @@ receivers. Sharing settings are saved per Windows user. Browser local network
 permission remains separate and can be requested again by the browser.
 The telemetry stream supports multiple concurrent receivers.
 
+AO checks the loopback-only `/local-connection` WebSocket when a standard LAN
+connection is remembered. If that LAN address belongs to this PC, AO remembers
+the loopback stream instead. This works before a flight is loaded and with
+sharing off. A saved address belonging to another flight PC is preserved.
+Older Bridge versions do not support this check; use **Connect to this PC**
+in AO's Connection tab to reset a legacy address explicitly.
+
 Keep the package together: `bridge/` contains the telemetry runtime and
 `resources/host-console/` contains the desktop UI. The `lite` package requires
 .NET Desktop Runtime and ASP.NET Core Runtime matching the target framework,
