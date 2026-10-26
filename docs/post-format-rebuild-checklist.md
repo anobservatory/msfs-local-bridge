@@ -72,6 +72,8 @@ Open the extracted desktop app and confirm:
 7. Disable Access returns to a loopback-only listener; settings survive restart.
 8. A registered browser remembers the host on a plain-site visit. Test updating
    an expired host address and browser permission denial/retry separately.
+9. At 150% and 200% Windows display scaling, the sharing QR remains readable,
+   its link sits beside it, and short windows can scroll to every control.
 
 Run with MSFS in a loaded cockpit to verify actual aircraft position and
 telemetry. Separately verify another LAN device and permission/firewall failure

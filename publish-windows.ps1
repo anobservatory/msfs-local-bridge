@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [string]$Version = '0.2.15',
+  [string]$Version = '0.2.16',
   [ValidateSet('Debug', 'Release')]
   [string]$Configuration = 'Release',
   [ValidateSet('lite', 'self-contained')]
