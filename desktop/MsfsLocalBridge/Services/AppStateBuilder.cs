@@ -9,6 +9,8 @@ internal sealed class AppStateBuilder
     {
         var lanCheck = FindCheck(diagnostics, "network.lan_ipv4");
         var firewallBridgeCheck = FindCheck(diagnostics, "network.firewall_private_39000");
+        var sharingProfileCheck = FindCheck(diagnostics, "network.sharing_profile");
+        var sharingProfileReady = sharingProfileCheck?.Status == "pass";
         var portBridgeCheck = FindCheck(diagnostics, "network.port_39000");
 
         var hostIp = ExtractLanIp(lanCheck?.Message) ?? "Not available";
@@ -26,7 +28,7 @@ internal sealed class AppStateBuilder
         var bridgeStartReady = hasRequiredHostRuntime && requiredFirewallReady && portAvailable;
         var hasLocalBridgeAddress = sharedBridgeUrl != "Not available";
         var listenerSetupReady = hasRequiredHostRuntime && session.IsRunning;
-        var canShareConnection = listenerSetupReady && allowLanAccess && firewallReady && hasLocalBridgeAddress;
+        var canShareConnection = listenerSetupReady && allowLanAccess && firewallReady && hasLocalBridgeAddress && sharingProfileReady;
         var issues = new List<string>();
         var startFailure = session.LastFailureReason;
         var hasStartFailure = !string.IsNullOrWhiteSpace(startFailure);
@@ -49,7 +51,7 @@ internal sealed class AppStateBuilder
         var prioritizedChecks = diagnostics.Checks
             .Where(check => check.Status != "pass")
             .Where(check => IsRelevantLnaCheck(check.Id, session.IsRunning))
-            .Where(check => allowLanAccess || (check.Id != "network.firewall_private_39000" && check.Id != "network.lan_ipv4"))
+            .Where(check => allowLanAccess || (check.Id != "network.firewall_private_39000" && check.Id != "network.lan_ipv4" && check.Id != "network.sharing_profile"))
             .OrderBy(check => PriorityFor(check.Id))
             .ThenBy(check => check.Id, StringComparer.OrdinalIgnoreCase)
             .Select(check => check.Message);
@@ -112,8 +114,11 @@ internal sealed class AppStateBuilder
             ConnectUrl = connectUrl,
             AllowLanAccess = allowLanAccess,
             CanShareConnection = canShareConnection,
-            CanEnableSharing = hasRequiredHostRuntime && hasLocalBridgeAddress,
-            SharingNote = !allowLanAccess ? "Other device access is off. Enable it to share telemetry on your private network. Windows may ask for administrator permission."
+            CanEnableSharing = hasRequiredHostRuntime && hasLocalBridgeAddress && sharingProfileReady,
+            SharingStatus = !sharingProfileReady ? (sharingProfileCheck?.Status == "fail" ? "Private network required" : "Check network profile")
+                : !allowLanAccess ? "Off" : !firewallReady ? "Firewall setup needed" : !session.IsRunning ? "Start Bridge" : !hasLocalBridgeAddress ? "LAN address needed" : "Ready",
+            SharingNote = !sharingProfileReady ? $"{sharingProfileCheck?.Message ?? "Network profile has not been verified."} In Windows network settings, choose Private only for a trusted home network, then return here. Local sync is still available."
+                : !allowLanAccess ? "Other device access is off. Enable it to share telemetry on your private network. Windows may ask for administrator permission."
                 : !firewallReady ? "Private network firewall access needs repair. Enable access again to repair it."
                 : !hasLocalBridgeAddress ? "No LAN address found. Connect the flight PC to your private network."
                 : !session.IsRunning ? "Access enabled. Start Bridge to show the QR and connection link."

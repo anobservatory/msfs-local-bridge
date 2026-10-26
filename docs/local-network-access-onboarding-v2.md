@@ -35,6 +35,13 @@ the ordinary AO address. Browser storage is specific to that browser/profile;
 clearing it requires registration again. If storage is blocked, the setup URL
 is retained so it remains reusable.
 
+Sharing readiness checks the network profile of the actual LAN interface,
+not only whether a Private firewall rule exists. Public or unverifiable
+profiles do not show a ready QR. The app explains how to select Private for
+a trusted home network; it never changes network trust automatically. Local
+sync remains available. Other devices has its own sharing status, separate
+from same-PC AO readiness.
+
 If DHCP changes the flight PC address, register a fresh link. AO Connection
 also accepts a pasted link and offers Use local bridge for recovery. There is
 no automatic discovery or cloud telemetry relay. Concurrent browsers receive
@@ -46,6 +53,12 @@ AO initiates the connection; the browser owns its network permission prompt.
 Bridge owns Windows firewall setup. Neither application can grant the browser
 permission silently. A refused connection has recovery guidance and an initial
 connection timeout; the user can update site permissions and retry sync.
+
+On Android, the browser app may also need Nearby devices / Local network
+permission in phone Settings → Apps → the browser → Permissions. This is
+separate from the AO site's browser permission. If the host's HTTP health
+address will not open directly on the phone, check this app permission as
+well as the LAN and firewall settings before changing the web deployment.
 
 Chrome/Edge with WebSocket local-network permission support are the target.
 [Chrome 147 release notes](https://developer.chrome.com/release-notes/147)

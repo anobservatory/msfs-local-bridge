@@ -315,7 +315,14 @@ function activateCompositeTab(target) {
     panel.hidden = !active;
   }
 
+  if (lastHostState) updateAccessReadiness(lastHostState);
   scheduleHostResize();
+}
+
+function updateAccessReadiness(state) {
+  const sharingView = !document.getElementById("other-devices-pane").hidden;
+  setText("listener-readiness-pill", sharingView ? (state.sharingStatus || "Check network profile") : state.listenerSetupState);
+  applyStateTone(document.getElementById("listener-readiness-pill"), document.getElementById("listener-readiness-pill").textContent);
 }
 
 function lnaConnectionText(state) {
@@ -433,7 +440,7 @@ function applyState(state) {
 
   setActionButtonText("install-dotnet-button", state.dotNetButtonText);
   setActionButtonText("install-vcredist-button", state.vcRedistButtonText);
-  setActionButtonText("open-firewall-rules-button", state.allowLanAccess && state.firewallStepText === "Ready" ? "Enabled" : "Enable Access");
+  setActionButtonText("open-firewall-rules-button", state.sharingStatus === "Private network required" || state.sharingStatus === "Check network profile" ? "Check Network" : state.allowLanAccess && state.firewallStepText === "Ready" ? "Enabled" : "Enable Access");
   setActionButtonText("start-bridge-button", bridgeStartButtonLabel(state));
   setActionButtonText("open-ao-button", openAoButtonLabel(state));
 
@@ -450,6 +457,7 @@ function applyState(state) {
   setDisabled("open-bootstrap-page-button", !state.canUseListenerSetup);
 
   listenerPanel.dataset.ready = String(Boolean(state.canUseListenerSetup));
+  updateAccessReadiness(state);
   document.body.classList.toggle("bridge-running", bridgeRunning);
 
   const toneIds = [
