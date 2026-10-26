@@ -938,3 +938,8 @@ body.embedded-host .preview-switcher {
     bottom: 12px;
   }
 }
+
+.sharing-actions { display: flex; gap: 8px; margin: 12px 0; }
+.host-notification { padding: 10px 14px; border: 1px solid #526d88; border-radius: 10px; color: #dceaff; background: #182b40; font-size: 12px; }
+#connection-qr { width: 200px; max-width: 100%; margin: 16px auto; background: white; border-radius: 8px; }
+#connection-qr svg { display: block; width: 100%; height: auto; }

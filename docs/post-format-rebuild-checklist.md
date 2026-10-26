@@ -67,7 +67,11 @@ Open the extracted desktop app and confirm:
 2. Start Bridge opens the stream; HTTP health answers on port 39000.
 3. Restart Bridge restores the stream.
 4. Stop Bridge and closing the desktop app release the stream/processes.
-5. Open AO uses the generated LAN connect link and browser permission flow.
+5. Open AO uses plain https://anobservatory.com/. Local sync works without a LAN rule.
+6. Access → Other devices enables optional private-LAN sharing, QR, and copy link.
+7. Disable Access returns to a loopback-only listener; settings survive restart.
+8. A registered browser remembers the host on a plain-site visit. Test updating
+   an expired host address and browser permission denial/retry separately.
 
 Run with MSFS in a loaded cockpit to verify actual aircraft position and
 telemetry. Separately verify another LAN device and permission/firewall failure

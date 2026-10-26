@@ -11,7 +11,15 @@ const openDiagnosticsButton = document.getElementById("open-diagnostics-button")
 const closeDiagnosticsButton = document.getElementById("close-diagnostics-button");
 const diagnosticsDrawer = document.getElementById("diagnostics-drawer");
 const drawerScrim = document.getElementById("drawer-scrim");
-const openAoSessionCopy = "Open AO with this session's bridge URL. After that, use anobservatory.com normally.";
+const openAoSessionCopy = "Visit anobservatory.com and Start Sync in MSFS Connect. Allow local network access if your browser asks.";
+let renderedQrUrl = null;
+let isHostBusy = false;
+let lastHostState = null;
+
+function applyHostBusy(busy) {
+  isHostBusy = busy;
+  if (lastHostState) applyState(lastHostState);
+}
 let resizeFrame = 0;
 let hostResizeObserver = null;
 
@@ -223,7 +231,7 @@ function getRecommendedAction(state) {
     };
   }
 
-  if (state.firewallStepText !== "Ready") {
+  if (state.allowLanAccess && state.firewallStepText !== "Ready") {
     return {
       action: "open-firewall-rules",
       label: "Open Firewall Rule",
@@ -319,7 +327,7 @@ function lnaConnectionText(state) {
     return "Browser permission";
   }
 
-  if (state.firewallStepText !== "Ready") {
+  if (state.allowLanAccess && state.firewallStepText !== "Ready") {
     return "Firewall 39000 needed";
   }
 
@@ -343,7 +351,7 @@ function blockedChecklistLabel(state) {
     return "Install runtimes";
   }
 
-  if (state.firewallStepText !== "Ready") {
+  if (state.allowLanAccess && state.firewallStepText !== "Ready") {
     return "Open firewall first";
   }
 
@@ -371,6 +379,8 @@ function openAoButtonLabel(state) {
 }
 
 function applyState(state) {
+  lastHostState = state;
+  for (const button of actionButtons) button.disabled = false;
   finishInitialLoading();
 
   const recommendation = getRecommendedAction(state);
@@ -401,25 +411,41 @@ function applyState(state) {
   setText("secure-connect-url", state.connectUrl);
   setText("bootstrap-url", bridgeUrl);
   setText("runtime-log", state.runtimeLog);
+  setText("sharing-note", state.sharingNote || "Other device access is off.");
+  setDisabled("enable-device-access-button", !state.canEnableSharing || (state.allowLanAccess && state.firewallStepText === "Ready"));
+  setDisabled("disable-device-access-button", !state.allowLanAccess);
+  document.getElementById("sharing-connection").hidden = !state.canShareConnection;
+  const qrUrl = state.canShareConnection ? state.connectUrl : null;
+  if (qrUrl !== renderedQrUrl) {
+    const container = document.getElementById("connection-qr");
+    container.replaceChildren();
+    if (qrUrl) {
+      const qr = qrcode(0, "M");
+      qr.addData(qrUrl);
+      qr.make();
+      container.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 16, scalable: true });
+    }
+    renderedQrUrl = qrUrl;
+  }
 
   focusActionButton.dataset.action = recommendation.action;
   focusActionButton.textContent = recommendation.label;
 
   setActionButtonText("install-dotnet-button", state.dotNetButtonText);
   setActionButtonText("install-vcredist-button", state.vcRedistButtonText);
-  setActionButtonText("open-firewall-rules-button", state.canOpenFirewallRules ? "Open Rule" : blockedChecklistLabel(state));
+  setActionButtonText("open-firewall-rules-button", state.allowLanAccess && state.firewallStepText === "Ready" ? "Enabled" : "Enable Access");
   setActionButtonText("start-bridge-button", bridgeStartButtonLabel(state));
   setActionButtonText("open-ao-button", openAoButtonLabel(state));
 
   setDisabled("focus-action-button", isRecommendedActionDisabled(recommendation.action, state));
   setDisabled("install-dotnet-button", !state.canInstallDotNet);
   setDisabled("install-vcredist-button", !state.canInstallVcRedist);
-  setDisabled("open-firewall-rules-button", !state.canOpenFirewallRules);
+  setDisabled("open-firewall-rules-button", !state.canEnableSharing || (state.allowLanAccess && state.firewallStepText === "Ready"));
   setDisabled("start-bridge-button", !state.canStartBridge);
   setDisabled("open-ao-button", !state.canUseListenerSetup);
   setDisabled("stop-bridge-button", !state.canStopBridge);
   setDisabled("restart-bridge-button", !state.canRestartBridge);
-  setDisabled("copy-link-button", !state.canUseListenerSetup);
+  setDisabled("copy-link-button", !state.canShareConnection);
   setDisabled("copy-bootstrap-url-button", !state.canUseListenerSetup);
   setDisabled("open-bootstrap-page-button", !state.canUseListenerSetup);
 
@@ -442,6 +468,11 @@ function applyState(state) {
 
   for (const id of toneIds) {
     applyStateTone(document.getElementById(id), document.getElementById(id)?.textContent);
+  }
+
+  if (isHostBusy) {
+    for (const button of actionButtons) button.disabled = true;
+    setText("focus-state", "Working...");
   }
 
   scheduleHostResize();
@@ -598,7 +629,16 @@ if (window.chrome?.webview) {
       return;
     }
 
+    if (payload.type === "action-state") {
+      applyHostBusy(Boolean(payload.busy));
+      return;
+    }
+
     if (payload.type === "notification" && payload.message) {
+      const notification = document.getElementById("host-notification");
+      notification.textContent = payload.message;
+      notification.hidden = false;
+      scheduleHostResize();
       console.log(payload.message);
     }
   });

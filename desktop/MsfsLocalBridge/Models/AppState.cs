@@ -15,6 +15,11 @@ internal sealed class AppState
     public string ConnectUrl { get; set; } = "Not available";
     public string LocalBridgeUrl { get; set; } = "Not available";
     public string BootstrapUrl { get; set; } = "Not available";
+    public string OpenAoUrl { get; set; } = "https://anobservatory.com/";
+    public string SharingNote { get; set; } = "Other device access is off.";
+    public bool AllowLanAccess { get; set; }
+    public bool CanShareConnection { get; set; }
+    public bool CanEnableSharing { get; set; }
     public string RuntimeLog { get; set; } = string.Empty;
     public string DotNetStepText { get; set; } = "Action";
     public string DotNetButtonText { get; set; } = "Install .NET Runtime";

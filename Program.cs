@@ -761,7 +761,7 @@ internal sealed class BridgeOptions
 
   public static BridgeOptions FromEnvironment()
   {
-    var bindHost = ReadString("MSFS_BRIDGE_BIND", "0.0.0.0");
+    var bindHost = ReadString("MSFS_BRIDGE_BIND", "127.0.0.1");
     var port = ReadInt("MSFS_BRIDGE_PORT", fallback: 39000, min: 1025, max: 65535);
     var streamPath = NormalizePath(ReadString("MSFS_BRIDGE_PATH", "/stream"));
     var wssEnabled = ReadBool("MSFS_BRIDGE_WSS_ENABLED", false);

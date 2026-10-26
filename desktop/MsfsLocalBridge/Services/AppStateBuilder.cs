@@ -5,25 +5,28 @@ namespace MsfsLocalBridge.Services;
 
 internal sealed class AppStateBuilder
 {
-    public AppState Build(DiagnosticsResult diagnostics, string diagnosticsJson, BridgeSessionService session, PrerequisiteStatus prerequisites)
+    public AppState Build(DiagnosticsResult diagnostics, string diagnosticsJson, BridgeSessionService session, PrerequisiteStatus prerequisites, bool allowLanAccess = false)
     {
         var lanCheck = FindCheck(diagnostics, "network.lan_ipv4");
         var firewallBridgeCheck = FindCheck(diagnostics, "network.firewall_private_39000");
         var portBridgeCheck = FindCheck(diagnostics, "network.port_39000");
 
         var hostIp = ExtractLanIp(lanCheck?.Message) ?? "Not available";
-        var localBridgeUrl = hostIp == "Not available" ? "Not available" : $"ws://{hostIp}:39000/stream";
+        var sharedBridgeUrl = hostIp == "Not available" ? "Not available" : $"ws://{hostIp}:39000/stream";
+        var localBridgeUrl = "ws://127.0.0.1:39000/stream";
         var bootstrapUrl = hostIp == "Not available" ? "Not available" : $"http://{hostIp}:39000/bootstrap";
-        var connectUrl = localBridgeUrl == "Not available"
+        var connectUrl = sharedBridgeUrl == "Not available"
             ? "Not available"
-            : $"https://anobservatory.com/?msfsBridgeUrl={WebUtility.UrlEncode(localBridgeUrl)}";
+            : $"https://anobservatory.com/?msfsBridgeUrl={WebUtility.UrlEncode(sharedBridgeUrl)}";
 
         var firewallReady = firewallBridgeCheck?.Status == "pass";
         var portAvailable = portBridgeCheck?.Status == "pass" || session.IsRunning;
         var hasRequiredHostRuntime = prerequisites.HasRequiredDotNetRuntimes && prerequisites.HasVcRedist;
-        var bridgeStartReady = hasRequiredHostRuntime && firewallReady && portAvailable;
-        var hasLocalBridgeAddress = localBridgeUrl != "Not available";
-        var listenerSetupReady = bridgeStartReady && session.IsRunning && hasLocalBridgeAddress;
+        var requiredFirewallReady = !allowLanAccess || firewallReady;
+        var bridgeStartReady = hasRequiredHostRuntime && requiredFirewallReady && portAvailable;
+        var hasLocalBridgeAddress = sharedBridgeUrl != "Not available";
+        var listenerSetupReady = hasRequiredHostRuntime && session.IsRunning;
+        var canShareConnection = listenerSetupReady && allowLanAccess && firewallReady && hasLocalBridgeAddress;
         var issues = new List<string>();
         var startFailure = session.LastFailureReason;
         var hasStartFailure = !string.IsNullOrWhiteSpace(startFailure);
@@ -46,6 +49,7 @@ internal sealed class AppStateBuilder
         var prioritizedChecks = diagnostics.Checks
             .Where(check => check.Status != "pass")
             .Where(check => IsRelevantLnaCheck(check.Id, session.IsRunning))
+            .Where(check => allowLanAccess || (check.Id != "network.firewall_private_39000" && check.Id != "network.lan_ipv4"))
             .OrderBy(check => PriorityFor(check.Id))
             .ThenBy(check => check.Id, StringComparer.OrdinalIgnoreCase)
             .Select(check => check.Message);
@@ -53,13 +57,13 @@ internal sealed class AppStateBuilder
 
         var blockerCount = (prerequisites.HasRequiredDotNetRuntimes ? 0 : 1)
             + (prerequisites.HasVcRedist ? 0 : 1)
-            + (firewallReady ? 0 : 1)
+            + (requiredFirewallReady ? 0 : 1)
             + (portAvailable ? 0 : 1);
 
-        var bootstrapStatus = BuildBootstrapStatus(hasRequiredHostRuntime, firewallReady, portAvailable, session.IsRunning, hasLocalBridgeAddress);
+        var bootstrapStatus = BuildBootstrapStatus(hasRequiredHostRuntime, requiredFirewallReady, portAvailable, session.IsRunning, true);
         var startBridgeState = session.IsRunning ? "Running" : bridgeStartReady ? "Action" : "Locked";
-        var startBridgeNote = BuildStartBridgeNote(hasRequiredHostRuntime, firewallReady, portAvailable, session.IsRunning, localBridgeUrl, hasStartFailure, startFailure);
-        var listenerSetupNote = BuildListenerSetupNote(hasRequiredHostRuntime, firewallReady, portAvailable, session.IsRunning, hasLocalBridgeAddress);
+        var startBridgeNote = BuildStartBridgeNote(hasRequiredHostRuntime, requiredFirewallReady, portAvailable, session.IsRunning, localBridgeUrl, hasStartFailure, startFailure);
+        var listenerSetupNote = session.IsRunning ? "Visit anobservatory.com, select MSFS Connect, and Start Sync. Allow browser local network access if asked." : "Start Bridge, then open anobservatory.com.";
 
         var bridgeStatus = session.IsRunning
             ? "Running"
@@ -106,6 +110,14 @@ internal sealed class AppStateBuilder
             SecureStream = localBridgeUrl == "Not available" ? "Not available" : "39000 /stream",
             LastIssue = issues.FirstOrDefault() ?? "No issues",
             ConnectUrl = connectUrl,
+            AllowLanAccess = allowLanAccess,
+            CanShareConnection = canShareConnection,
+            CanEnableSharing = hasRequiredHostRuntime && hasLocalBridgeAddress,
+            SharingNote = !allowLanAccess ? "Other device access is off. Enable it to share telemetry on your private network. Windows may ask for administrator permission."
+                : !firewallReady ? "Private network firewall access needs repair. Enable access again to repair it."
+                : !hasLocalBridgeAddress ? "No LAN address found. Connect the flight PC to your private network."
+                : !session.IsRunning ? "Access enabled. Start Bridge to show the QR and connection link."
+                : "On a device on the same private network, scan the QR or open the connection link once. Allow browser local network access if asked. Then visit anobservatory.com normally. If the host address changes, use a fresh link.",
             LocalBridgeUrl = localBridgeUrl,
             BootstrapUrl = bootstrapUrl,
             RuntimeLog = string.IsNullOrWhiteSpace(session.RuntimeLog) ? diagnosticsJson : session.RuntimeLog,
@@ -115,7 +127,7 @@ internal sealed class AppStateBuilder
             VcRedistStepText = prerequisites.HasVcRedist ? "Installed" : "Action",
             VcRedistButtonText = prerequisites.HasVcRedist ? "Installed" : "Install VC++ Runtime",
             VcRedistCurrentNote = prerequisites.HasVcRedist ? prerequisites.VcRedistStatus : "not installed on this PC.",
-            FirewallStepText = firewallReady ? "Ready" : (hasRequiredHostRuntime ? "Action" : "Locked"),
+            FirewallStepText = !allowLanAccess ? "Optional" : firewallReady ? "Ready" : (hasRequiredHostRuntime ? "Action" : "Locked"),
             StartBridgeStepText = startBridgeState,
             StartBridgeButtonText = session.IsRunning ? "Bridge Running" : "Start Bridge",
             StartBridgeCurrentNote = startBridgeNote,

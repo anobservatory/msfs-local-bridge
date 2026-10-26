@@ -1,5 +1,5 @@
 param(
-  [string]$BindHost = "0.0.0.0",
+  [string]$BindHost = "127.0.0.1",
   [int]$Port = 39000,
   [int]$WssPort = 39002,
   [string]$LocalDomain = "ao.home.arpa",
@@ -235,7 +235,12 @@ if ($wssReady) {
   }
 }
 
-if (-not $SkipLanHints) {
+$localOnly = $BindHost -in @('127.0.0.1', 'localhost', '::1')
+if ($localOnly) {
+  Write-Host "  Open AO: https://anobservatory.com/"
+  Write-Host "  Local connections only. To share on a private LAN, use -BindHost 0.0.0.0 and configure the private firewall rule."
+}
+if (-not $SkipLanHints -and -not $localOnly) {
   if ($lanIps.Count -gt 0) {
     Write-Host "  LAN URL candidates:"
     foreach ($ip in $lanIps) {

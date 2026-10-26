@@ -11,8 +11,23 @@ desktop checkout is no longer required.
 
 1. Extract the Windows desktop portable ZIP into a folder.
 2. Run `MsfsLocalBridge.exe` at the top of the extracted folder.
-3. Complete the host checks, then choose **Start Bridge** and **Open AO**.
-4. Allow browser local network access when requested.
+3. Install missing runtimes if needed, then choose **Start Bridge**.
+4. Visit **https://anobservatory.com/** (or choose **Open AO**) and Start Sync
+   in MSFS Connect. Allow browser local network access when requested.
+
+The default listener is local-only (`127.0.0.1`). Same-PC use requires no
+inbound firewall rule or setup URL. To receive telemetry on another device,
+open **Access → Other devices → Enable Access**. Windows may ask for
+administrator permission to create the Private-profile, local-subnet TCP
+39000 rule. Start Bridge, then scan the QR or copy the connection link to a
+browser on the same private network. That browser remembers the host and can
+subsequently visit anobservatory.com directly. If the host IP changes, register
+a fresh link; there is no automatic LAN host discovery.
+
+Disable Access returns the listener to loopback only, disconnecting remote
+receivers. Sharing settings are saved per Windows user. Browser local network
+permission remains separate and can be requested again by the browser.
+The telemetry stream supports multiple concurrent receivers.
 
 Keep the package together: `bridge/` contains the telemetry runtime and
 `resources/host-console/` contains the desktop UI. The `lite` package requires
@@ -34,13 +49,15 @@ worker binary the desktop app retains the existing embedded SimConnect mode.
 
 See [the rebuild checklist](docs/post-format-rebuild-checklist.md) for source
 build requirements and package verification. The web app remains in
-`anobservatory/anobservatory`; this consolidation preserves the current LAN
-connection URL and onboarding behavior.
+`anobservatory/anobservatory`; its connection settings support ordinary-site
+entry, remembered QR registration, and explicit connection recovery.
 
 ## Manual Bridge Usage
 
-- Local stream endpoint: `ws://<WINDOWS_IP>:39000/stream`
-- Browser entry point: `https://anobservatory.com/?msfsBridgeUrl=ws%3A%2F%2F<WINDOWS_IP>%3A39000%2Fstream`
+- Local stream endpoint: `ws://127.0.0.1:39000/stream`
+- Browser entry point: `https://anobservatory.com/`
+- Manual LAN sharing: use `-BindHost 0.0.0.0`, configure the private firewall rule,
+  then register `ws://<WINDOWS_IP>:39000/stream` through a generated connection link.
 - Default setup does not require a custom certificate, local Root CA, listener certificate install, or TCP `39002`.
 - Payload shape matches `src/services/msfs/msfsClient.ts`.
 
@@ -140,10 +157,10 @@ Expected response:
 
 ## Connect anobservatory
 
-Use the URL printed by `start.ps1`:
+On the flight PC, visit the ordinary site address while Bridge is running:
 
 ```text
-https://anobservatory.com/?msfsBridgeUrl=ws%3A%2F%2F<WINDOWS_IP>%3A39000%2Fstream
+https://anobservatory.com/
 ```
 
 Chrome and Edge may show a local network access prompt. Allow it.
@@ -156,9 +173,10 @@ http://localhost:3000/?msfsBridgeUrl=ws://<WINDOWS_IP>:39000/stream
 
 ## Firewall and Network
 
-Windows and the listener device must be on the same LAN.
+Same-PC sync uses loopback and requires no inbound rule. Optional receiver
+devices must be on the same private LAN as the flight PC.
 
-Default required inbound port:
+Optional LAN-sharing inbound port (Private profile, local subnet):
 
 - TCP `39000`
 
@@ -208,7 +226,7 @@ JSON mode:
 
 Defaults are safe for first run.
 
-- `MSFS_BRIDGE_BIND` default: `0.0.0.0`
+- `MSFS_BRIDGE_BIND` default: `127.0.0.1`
 - `MSFS_BRIDGE_PORT` default: `39000`
 - `MSFS_BRIDGE_PATH` default: `/stream`
 - `MSFS_BRIDGE_SAMPLE_MS` default: `200`

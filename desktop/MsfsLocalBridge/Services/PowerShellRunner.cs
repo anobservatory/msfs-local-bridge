@@ -67,6 +67,15 @@ internal sealed class PowerShellRunner
         Process.Start(CreateStartInfo(workingDirectory, arguments, redirectIo: false, useShellExecute: true, createNoWindow: false, verb: "runas"));
     }
 
+    public async Task<int> RunElevatedAsync(string workingDirectory, string arguments)
+    {
+        using var process = Process.Start(CreateStartInfo(workingDirectory, arguments,
+            redirectIo: false, useShellExecute: true, createNoWindow: true, verb: "runas"))
+            ?? throw new InvalidOperationException("Windows did not start firewall setup.");
+        await process.WaitForExitAsync();
+        return process.ExitCode;
+    }
+
     private ProcessStartInfo CreateStartInfo(
         string workingDirectory,
         string arguments,
@@ -83,7 +92,8 @@ internal sealed class PowerShellRunner
             RedirectStandardOutput = redirectIo,
             RedirectStandardError = redirectIo,
             UseShellExecute = useShellExecute,
-            CreateNoWindow = createNoWindow
+            CreateNoWindow = createNoWindow,
+            WindowStyle = ProcessWindowStyle.Hidden
         };
 
         if (!string.IsNullOrWhiteSpace(verb))

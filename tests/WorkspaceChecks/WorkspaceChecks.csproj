@@ -7,5 +7,10 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../desktop/MsfsLocalBridge/Services/BridgeWorkspace.cs" Link="BridgeWorkspace.cs" />
+    <Compile Include="../../desktop/MsfsLocalBridge/Services/ConnectionSettings.cs" Link="ConnectionSettings.cs" />
+    <Compile Include="../../desktop/MsfsLocalBridge/Services/AppStateBuilder.cs" Link="AppStateBuilder.cs" />
+    <Compile Include="../../desktop/MsfsLocalBridge/Services/BridgeSessionService.cs" Link="BridgeSessionService.cs" />
+    <Compile Include="../../desktop/MsfsLocalBridge/Services/PowerShellRunner.cs" Link="PowerShellRunner.cs" />
+    <Compile Include="../../desktop/MsfsLocalBridge/Models/*.cs" Link="Models/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

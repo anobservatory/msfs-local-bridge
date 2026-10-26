@@ -11,6 +11,7 @@ $required = @(
   'MsfsLocalBridge.exe', 'MsfsLocalBridge.runtimeconfig.json', 'WebView2Loader.dll',
   'resources\host-console\index.html', 'resources\host-console\app.js',
   'resources\host-console\styles.css', 'bridge\MsfsLocalBridge.exe',
+  'resources\host-console\vendor\qrcode.js', 'resources\host-console\vendor\LICENSE.qrcode-generator',
   'bridge\MsfsLocalBridge.runtimeconfig.json', 'bridge\SimConnect.dll',
   'bridge\Microsoft.FlightSimulator.SimConnect.dll', 'bridge\lib\SimConnect.dll',
   'bridge\lib\Microsoft.FlightSimulator.SimConnect.dll', 'bridge\run-bridge.ps1',
@@ -32,7 +33,7 @@ $info.UseShellExecute = $false
 $info.CreateNoWindow = $true
 $info.RedirectStandardOutput = $true
 $info.RedirectStandardError = $true
-$info.Environment['MSFS_BRIDGE_BIND'] = '127.0.0.1'
+$info.Environment.Remove('MSFS_BRIDGE_BIND') | Out-Null
 $info.Environment['MSFS_BRIDGE_PORT'] = "$port"
 $info.Environment['MSFS_BRIDGE_WSS_ENABLED'] = 'false'
 $info.Environment['MSFS_BRIDGE_BOOTSTRAP_ENABLED'] = 'false'
@@ -45,6 +46,7 @@ if ($TestWorkerPath) {
 $process = [Diagnostics.Process]::new()
 $process.StartInfo = $info
 $socket = [Net.WebSockets.ClientWebSocket]::new()
+$secondSocket = [Net.WebSockets.ClientWebSocket]::new()
 try {
   if (-not $process.Start()) { throw 'Bridge process did not start.' }
   $stdout = $process.StandardOutput.ReadToEndAsync()
@@ -58,11 +60,15 @@ try {
   if (-not $health -or $health.name -ne 'msfs-local-bridge') { throw 'Bridge health endpoint failed.' }
   if ($health.wssEnabled) { throw 'Default package unexpectedly enabled WSS.' }
   Write-Host "PASS: Packaged bridge HTTP health ($($health.simConnectMode))."
+  $bindings = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction Stop)
+  if (-not $bindings.Count -or @($bindings | Where-Object LocalAddress -ne '127.0.0.1').Count) { throw 'Default bridge must bind only to loopback.' }
+  Write-Host 'PASS: Default listener accepts local connections only.'
 
   $timeout = [Threading.CancellationTokenSource]::new(10000)
   try {
     $null = $socket.ConnectAsync([Uri]"ws://127.0.0.1:$port/stream", $timeout.Token).GetAwaiter().GetResult()
     if ($socket.State -ne [Net.WebSockets.WebSocketState]::Open) { throw 'WebSocket handshake failed.' }
+    $null = $secondSocket.ConnectAsync([Uri]"ws://127.0.0.1:$port/stream", $timeout.Token).GetAwaiter().GetResult()
     Write-Host 'PASS: Packaged bridge WebSocket handshake.'
     if ($TestWorkerPath) {
       $buffer = [byte[]]::new(65536)
@@ -78,12 +84,18 @@ try {
           throw 'IPC fixture telemetry did not match the browser stream contract.'
         }
         if (-not $frame.sessionMeta.companionVersion) { throw 'Bridge version metadata is missing.' }
+        $secondBuffer = [byte[]]::new(65536)
+        $secondReceived = $secondSocket.ReceiveAsync([ArraySegment[byte]]::new($secondBuffer), $timeout.Token).GetAwaiter().GetResult()
+        $secondFrame = [Text.Encoding]::UTF8.GetString($secondBuffer, 0, $secondReceived.Count) | ConvertFrom-Json
+        if ($secondFrame.ownship.callsign -ne 'AOTEST') { throw 'Second receiver did not receive the same flight.' }
+        Write-Host 'PASS: Independent receivers receive the same telemetry concurrently.'
         Write-Host "PASS: Test fixture worker -> packaged bridge -> telemetry v1 (bridge $($frame.sessionMeta.companionVersion))."
       } finally { $message.Dispose() }
     }
   } finally { $timeout.Dispose() }
 } finally {
   $socket.Dispose()
+  $secondSocket.Dispose()
   if ($process.Id -and -not $process.HasExited) { $process.Kill($true); $process.WaitForExit() }
   $process.Dispose()
 }

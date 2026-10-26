@@ -26,6 +26,7 @@
       </header>
 
       <main class="layout">
+        <div id="host-notification" class="host-notification" role="status" hidden></div>
         <section class="panel loading-panel" aria-live="polite">
           <div class="loading-main">
             <div class="loading-spinner" aria-hidden="true"></div>
@@ -47,8 +48,8 @@
                 <span>Prepare the local WebSocket stream for AO.</span>
               </li>
               <li>
-                <strong>Open AO with the bridge URL</strong>
-                <span>Hand off this session to anobservatory.com.</span>
+                <strong>Open anobservatory.com</strong>
+                <span>Start Sync and allow browser access if asked.</span>
               </li>
             </ol>
           </div>
@@ -122,12 +123,12 @@
             <article class="check-item">
               <div class="check-order">3</div>
               <div class="check-copy">
-                <strong>Firewall</strong>
-                <p>Allow inbound TCP 39000 on the private network.</p>
+                <strong>Other devices (optional)</strong>
+                <p>Same-PC connections need no inbound firewall rule. Manage sharing in Access → Other devices.</p>
               </div>
               <div class="check-meta">
                 <button class="button button-secondary button-compact check-action" data-action="open-firewall-rules" id="open-firewall-rules-button">
-                  Open Rule
+                  Enable Access
                 </button>
               </div>
             </article>
@@ -149,7 +150,7 @@
               <div class="check-order">5</div>
               <div class="check-copy">
                 <strong>Open AO</strong>
-                <p id="open-ao-current-note">Open AO with this session's bridge URL. After that, use anobservatory.com normally.</p>
+                <p id="open-ao-current-note">Visit anobservatory.com and Start Sync. Allow local network access if your browser asks.</p>
               </div>
               <div class="check-meta">
                 <button class="button button-primary button-compact check-action" data-action="open-bootstrap-page" id="open-ao-button">
@@ -183,6 +184,7 @@
               >
                 Open AO
               </button>
+              <button class="composite-tab-button" type="button" data-composite-tab-target="other-devices" aria-controls="other-devices-pane" aria-selected="false" role="tab">Other devices</button>
             </nav>
             <div class="inline-state" id="listener-readiness-pill">Locked</div>
           </div>
@@ -242,12 +244,13 @@
               <div class="field-stack">
                 <div class="field-block">
                   <div class="field-head">
-                    <span class="field-label">AO Connect URL</span>
-                    <button class="button button-secondary button-compact field-copy-button" data-action="copy-link" id="copy-link-button">
-                      Copy
+                    <span class="field-label">AO</span>
+                    <button class="button button-primary button-compact field-copy-button" data-action="open-bootstrap-page" id="open-bootstrap-page-button">
+                      Open AO
                     </button>
                   </div>
-                  <code id="secure-connect-url">Not available</code>
+                  <code>https://anobservatory.com/</code>
+                  <p>Start Sync in MSFS Connect. Allow local network access if asked. You can visit this address directly whenever Bridge is running.</p>
                 </div>
                 <div class="field-block">
                   <div class="field-head">
@@ -257,6 +260,21 @@
                     </button>
                   </div>
                   <code id="bootstrap-url">Not available</code>
+                </div>
+              </div>
+            </section>
+            <section class="composite-section composite-pane" id="other-devices-pane" data-composite-tab-panel="other-devices" role="tabpanel" hidden>
+              <div class="composite-head"><p class="section-label">Other devices</p><h3 class="composite-title">Share telemetry on your private network</h3></div>
+              <p id="sharing-note">Other device access is off.</p>
+              <div class="sharing-actions">
+                <button class="button button-primary button-compact" data-action="enable-device-access" id="enable-device-access-button">Enable Access</button>
+                <button class="button button-secondary button-compact" data-action="disable-device-access" id="disable-device-access-button" disabled>Disable Access</button>
+              </div>
+              <div id="sharing-connection" hidden>
+                <div id="connection-qr" role="img" aria-label="Scan to register this flight PC in AO"></div>
+                <div class="field-block">
+                  <div class="field-head"><span class="field-label">Connection link</span><button class="button button-secondary button-compact" data-action="copy-link" id="copy-link-button">Copy Link</button></div>
+                  <code id="secure-connect-url">Not available</code>
                 </div>
               </div>
             </section>
@@ -291,6 +309,7 @@
       <button class="preview-button" data-preview-state="running">Running</button>
     </aside>
 
+    <script src="./vendor/qrcode.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
