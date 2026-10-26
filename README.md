@@ -4,8 +4,8 @@ Windows desktop app and bridge for streaming MSFS SimConnect telemetry to anobse
 
 This repository now includes the desktop host under `desktop/`, the bridge
 runtime at the root, and the native SimConnect worker under `workers/`.
-The former `anobservatory/msfs-local-bridge-desktop` history is preserved by
-the subtree import. A sibling desktop checkout is no longer required.
+The desktop host's Git history is preserved by the subtree import. A sibling
+desktop checkout is no longer required.
 
 ## Desktop App (Recommended)
 

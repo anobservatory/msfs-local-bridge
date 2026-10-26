@@ -78,6 +78,6 @@ WebSocket on port 39000; certificates and port 39002 are not required.
 
 The desktop source was imported under `desktop/` with its Git history intact.
 Its project is now `desktop/MsfsLocalBridge/MsfsLocalBridge.Desktop.csproj`.
-After integration is accepted on the default branch, retain the old desktop
-repository as a read-only archive with a link to this repository. Do not delete
-its history or release links as part of a local build.
+The imported desktop history is preserved on the default branch. Build and
+source references use this repository, so the former standalone desktop
+repository is no longer required for development, packaging, or runtime use.
