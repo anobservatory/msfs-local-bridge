@@ -17,6 +17,8 @@ weight and information duplication from `windows-host-onboarding-v1`.
 - one compact host status panel
 - Open AO uses the ordinary site address after local bridge startup
 - Other devices is optional and exposes access controls, QR, and copy link
+- Setup's sharing action always opens Access → Other devices. When sharing is
+  already enabled, Manage Access opens the view without reconfiguring the host.
 - active host actions disable controls and surface notifications
 - diagnostics stay available, but behind a lower-emphasis panel
 
