@@ -1,4 +1,5 @@
 using MsfsLocalBridge.Services;
+using MsfsLocalBridge.Models;
 using System.Text.Json;
 
 // A deterministic IPC fixture for package smoke tests, never a production worker.
@@ -33,6 +34,31 @@ try
     var workspace = new BridgeWorkspace(output);
     Require(workspace.BridgeRepoRoot == source && !workspace.UsesBundledBridge,
         "Find the unified source repository without relying on its folder name or a sibling checkout.");
+
+    var settingsPath = Path.Combine(fixture, "settings", "connection.json");
+    var settings = new ConnectionSettings(settingsPath);
+    Require(!settings.AllowLanAccess, "First launch defaults to local access only.");
+    settings.Save(true);
+    Require(new ConnectionSettings(settingsPath).AllowLanAccess, "Remember optional sharing across restarts.");
+    settings.Save(false);
+    Require(!new ConnectionSettings(settingsPath).AllowLanAccess, "Disabling sharing is persistent.");
+    File.WriteAllText(settingsPath, "invalid");
+    Require(!new ConnectionSettings(settingsPath).AllowLanAccess, "Invalid settings fail closed to local access.");
+
+    var diagnostics = new DiagnosticsResult { Checks = [
+        new() { Id = "network.firewall_private_39000", Status = "warn", Message = "Firewall missing" },
+        new() { Id = "network.lan_ipv4", Status = "warn", Message = "No LAN address" },
+        new() { Id = "network.port_39000", Status = "pass" }
+    ] };
+    var prerequisites = new PrerequisiteStatus { HasDotNetDesktopRuntime = true, HasAspNetCoreRuntime = true, HasVcRedist = true };
+    var session = new BridgeSessionService(workspace, new PowerShellRunner(), settings);
+    var state = new AppStateBuilder().Build(diagnostics, "{}", session, prerequisites);
+    Require(state.CanStartBridge && state.BlockerText == "0 blockers" && state.LastIssue == "No issues",
+        "Local access does not depend on an inbound rule or LAN address.");
+    Require(state.OpenAoUrl == "https://anobservatory.com/", "Open AO uses the ordinary site address.");
+    Require(!state.CanShareConnection && state.FirewallStepText == "Optional", "No sharing link before access is enabled.");
+    state = new AppStateBuilder().Build(diagnostics, "{}", session, prerequisites, allowLanAccess: true);
+    Require(!state.CanStartBridge && state.BlockerText == "1 blocker", "Enabled LAN access requires its private firewall rule.");
 
     var bundled = Path.Combine(output, "bridge");
     CreatePayload(bundled);

@@ -31,6 +31,10 @@ public partial class MainWindow : Window
     private readonly BridgeWorkspace _workspace = new();
     private readonly PowerShellRunner _powerShellRunner = new();
     private readonly BridgeSessionService _sessionService;
+    private readonly ConnectionSettings _connectionSettings;
+    private bool _actionInProgress;
+    private bool _isClosing;
+    private Task? _statePublishTask;
     private readonly BridgeDiagnosticsService _diagnosticsService;
     private readonly PrerequisiteInstallerService _prerequisiteInstaller = new();
     private readonly AppStateBuilder _stateBuilder = new();
@@ -49,7 +53,8 @@ public partial class MainWindow : Window
         InitializeComponent();
         _windowPlacementPath = Path.Combine(_settingsDirectory, "window-placement.json");
         ApplyFrameState();
-        _sessionService = new BridgeSessionService(_workspace, _powerShellRunner);
+        _connectionSettings = new ConnectionSettings(Path.Combine(_settingsDirectory, "connection-settings.json"));
+        _sessionService = new BridgeSessionService(_workspace, _powerShellRunner, _connectionSettings);
         _diagnosticsService = new BridgeDiagnosticsService(_workspace, _powerShellRunner);
         _refreshTimer = new DispatcherTimer
         {
@@ -129,6 +134,7 @@ public partial class MainWindow : Window
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        _isClosing = true;
         _refreshTimer.Stop();
         SaveWindowPlacement();
 
@@ -229,6 +235,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_actionInProgress)
+        {
+            await PostNotificationAsync("Please wait for the current action to finish.");
+            return;
+        }
+
+        _actionInProgress = true;
+        await PostActionStateAsync(true);
         try
         {
             await HandleActionAsync(envelope.Action);
@@ -237,6 +251,11 @@ public partial class MainWindow : Window
         {
             await PostNotificationAsync($"Action failed: {ex.Message}");
             await PublishStateAsync();
+        }
+        finally
+        {
+            _actionInProgress = false;
+            if (envelope.Action != "close-window") await PostActionStateAsync(false);
         }
     }
 
@@ -262,6 +281,7 @@ public partial class MainWindow : Window
                 await _sessionService.RestartAsync();
                 break;
             case "copy-link":
+                if (!_currentState.CanShareConnection) break;
                 Clipboard.SetText(_currentState.ConnectUrl);
                 await PostNotificationAsync("Copied AO connect URL.");
                 break;
@@ -289,7 +309,7 @@ public partial class MainWindow : Window
                 await PostNotificationAsync("Copied Windows bootstrap command.");
                 break;
             case "open-bootstrap-page":
-                OpenExternal(_currentState.ConnectUrl);
+                OpenExternal(_currentState.OpenAoUrl);
                 break;
             case "open-mobile-guide":
                 OpenExternal(_currentState.BootstrapUrl);
@@ -301,14 +321,45 @@ public partial class MainWindow : Window
                 await PostNotificationAsync(await _prerequisiteInstaller.InstallVcRedistAsync());
                 break;
             case "open-firewall-rules":
-                _powerShellRunner.StartElevated(
-                    _workspace.BridgeRepoRoot,
-                    $"-ExecutionPolicy Bypass -Command \"& '{_workspace.RepairScriptPath}' -Action OpenFirewall39000 -Port 39000\"");
-                await PostNotificationAsync("Requested elevated firewall rule update.");
+            case "enable-device-access":
+                await SetDeviceAccessAsync(true);
+                break;
+            case "disable-device-access":
+                await SetDeviceAccessAsync(false);
                 break;
         }
 
         await PublishStateAsync();
+    }
+
+    private async Task SetDeviceAccessAsync(bool enabled)
+    {
+        if (enabled && _currentState.FirewallStepText != "Ready")
+        {
+            // Recheck the actual rule: local-only mode deliberately labels it optional.
+            var (diagnostics, _) = await _diagnosticsService.GetAsync();
+            var ready = diagnostics.Checks.Any(check => check.Id == "network.firewall_private_39000" && check.Status == "pass");
+            if (!ready)
+            {
+                try
+                {
+                    var exitCode = await _powerShellRunner.RunElevatedAsync(_workspace.BridgeRepoRoot,
+                        $"-ExecutionPolicy Bypass -File \"{_workspace.RepairScriptPath}\" -Action OpenFirewall39000 -Port 39000 -Force");
+                    if (exitCode != 0) throw new InvalidOperationException("Firewall setup failed. Other device access was not enabled.");
+                }
+                catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+                {
+                    await PostNotificationAsync("Administrator permission was cancelled. Other device access was not enabled; local access is still available.");
+                    return;
+                }
+            }
+        }
+
+        var wasRunning = _sessionService.IsRunning;
+        await _sessionService.StopAsync();
+        _connectionSettings.Save(enabled);
+        if (wasRunning) await _sessionService.StartAsync();
+        await PostNotificationAsync(enabled ? "Other device access enabled on your private network." : "Other device access disabled. Bridge accepts local connections only.");
     }
 
     private void ToggleWindowState()
@@ -594,7 +645,15 @@ public partial class MainWindow : Window
         return null;
     }
 
-    private async Task PublishStateAsync()
+    private Task PublishStateAsync()
+    {
+        if (_isClosing) return Task.CompletedTask;
+        // Timer, navigation, and actions share one diagnostics process.
+        if (_statePublishTask is { IsCompleted: false }) return _statePublishTask;
+        return _statePublishTask = PublishStateCoreAsync();
+    }
+
+    private async Task PublishStateCoreAsync()
     {
         if (AppBrowser.CoreWebView2 is null)
         {
@@ -606,7 +665,7 @@ public partial class MainWindow : Window
             var (diagnostics, diagnosticsJson) = await _diagnosticsService.GetAsync();
             var prerequisites = _prerequisiteInstaller.DetectStatus();
             _lastDiagnosticsJson = diagnosticsJson;
-            _currentState = _stateBuilder.Build(diagnostics, diagnosticsJson, _sessionService, prerequisites);
+            _currentState = _stateBuilder.Build(diagnostics, diagnosticsJson, _sessionService, prerequisites, _connectionSettings.AllowLanAccess);
         }
         catch (Exception ex)
         {
@@ -628,6 +687,7 @@ public partial class MainWindow : Window
             };
         }
 
+        if (_isClosing) return;
         var payload = JsonSerializer.Serialize(new { type = "state", state = _currentState }, _jsonOptions);
         AppBrowser.CoreWebView2.PostWebMessageAsJson(payload);
     }
@@ -642,6 +702,13 @@ public partial class MainWindow : Window
         var payload = JsonSerializer.Serialize(new { type = "notification", message }, _jsonOptions);
         AppBrowser.CoreWebView2.PostWebMessageAsJson(payload);
         await Task.CompletedTask;
+    }
+
+    private Task PostActionStateAsync(bool busy)
+    {
+        if (_isClosing) return Task.CompletedTask;
+        AppBrowser.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "action-state", busy }, _jsonOptions));
+        return Task.CompletedTask;
     }
 
     private async Task PostWindowStateAsync()

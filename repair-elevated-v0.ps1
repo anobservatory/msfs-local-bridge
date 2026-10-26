@@ -98,6 +98,7 @@ function Add-OrUpdateFirewallRule {
     -Protocol TCP `
     -LocalPort $RulePort `
     -Profile Private `
+    -RemoteAddress LocalSubnet `
     -Enabled True `
     -ErrorAction Stop | Out-Null
 

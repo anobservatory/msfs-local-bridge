@@ -8,6 +8,7 @@ internal sealed class BridgeSessionService
 {
     private readonly BridgeWorkspace _workspace;
     private readonly PowerShellRunner _runner;
+    private readonly ConnectionSettings _connectionSettings;
     private readonly StringBuilder _runtimeLog = new();
     private readonly object _sync = new();
     private Process? _process;
@@ -15,10 +16,11 @@ internal sealed class BridgeSessionService
     private int? _lastExitCode;
     private int? _expectedExitProcessId;
 
-    public BridgeSessionService(BridgeWorkspace workspace, PowerShellRunner runner)
+    public BridgeSessionService(BridgeWorkspace workspace, PowerShellRunner runner, ConnectionSettings connectionSettings)
     {
         _workspace = workspace;
         _runner = runner;
+        _connectionSettings = connectionSettings;
     }
 
     public bool IsRunning => _process is { HasExited: false };
@@ -105,6 +107,7 @@ internal sealed class BridgeSessionService
 
         AppendLog("bridge: stopping process");
         _process.Kill(entireProcessTree: true);
+        _process.WaitForExit();
         _process.Dispose();
         _process = null;
         return Task.CompletedTask;
@@ -130,6 +133,7 @@ internal sealed class BridgeSessionService
         arguments.Append("-ExecutionPolicy Bypass -File \"");
         arguments.Append(_workspace.BridgeScriptPath);
         arguments.Append("\" -SkipLanHints -DisableWss");
+        arguments.Append(_connectionSettings.AllowLanAccess ? " -BindHost 0.0.0.0" : " -BindHost 127.0.0.1");
 
         var supportsWorkerMode = ScriptSupportsWorkerMode(_workspace.BridgeScriptPath);
         var workerExecutablePath = ResolveWorkerExecutablePath();
@@ -192,12 +196,23 @@ internal sealed class BridgeSessionService
 
     private void OnProcessExited(Process process)
     {
+        int exitCode;
+        int processId;
+        try
+        {
+            exitCode = process.ExitCode;
+            processId = process.Id;
+        }
+        catch (InvalidOperationException)
+        {
+            return;
+        }
         bool wasIntentionalStop;
 
         lock (_sync)
         {
-            _lastExitCode = process.ExitCode;
-            wasIntentionalStop = _expectedExitProcessId == process.Id;
+            _lastExitCode = exitCode;
+            wasIntentionalStop = _expectedExitProcessId == processId;
 
             if (wasIntentionalStop)
             {
@@ -205,7 +220,7 @@ internal sealed class BridgeSessionService
             }
             else
             {
-                _lastFailureReason ??= BuildFailureReason(_runtimeLog.ToString(), process.ExitCode);
+                _lastFailureReason ??= BuildFailureReason(_runtimeLog.ToString(), exitCode);
             }
         }
 
@@ -215,7 +230,7 @@ internal sealed class BridgeSessionService
             return;
         }
 
-        AppendLog($"bridge: exited with code {process.ExitCode}");
+        AppendLog($"bridge: exited with code {exitCode}");
     }
 
     private void ResetFailureState()

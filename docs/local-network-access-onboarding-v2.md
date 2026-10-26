@@ -1,80 +1,61 @@
-# Local Network Access Onboarding V2
+# Local Network Access Onboarding
 
-Status: proposed
-Date: 2026-05-27
+Status: implemented
+Last updated: 2026-10-26
 
-## Decision
+## Same-PC Default
 
-Deprecate and remove the default WSS Secure Mode onboarding flow.
+1. Open the Windows desktop app and install missing prerequisites if needed.
+2. Start Bridge. Its default listener binds only to `127.0.0.1:39000`.
+3. Visit https://anobservatory.com/ and Start Sync in MSFS Connect.
+4. Allow the browser's local network permission if requested.
 
-The default browser connection should use the local network WebSocket endpoint:
+Open AO launches the ordinary site URL. An inbound LAN firewall rule, LAN
+address, certificate, or first-run setup URL is not required for this path.
+The Windows Host Console retains Setup, Access, lifecycle controls, and logs.
 
-```text
-ws://<WINDOWS_IP>:39000/stream
-```
+## Optional Other Devices
 
-The AO connect URL should pass that endpoint directly:
+In Access → Other devices, Enable Access sets up the managed inbound TCP 39000
+rule for the Private profile and local subnet. If necessary, Windows requests
+administrator permission; cancellation leaves sharing disabled. An existing
+ready rule does not require another elevation. The setting is saved per user.
 
-```text
-https://anobservatory.com/?msfsBridgeUrl=ws%3A%2F%2F<WINDOWS_IP>%3A39000%2Fstream
-```
+Enabling or disabling access restarts a running bridge to change its binding.
+Enabled access binds to `0.0.0.0`; disabled access binds to `127.0.0.1`.
+Disabling stops remote access without deleting a previously created rule.
+QR and connection-link controls appear only while sharing is ready and running.
+QR generation uses the bundled MIT-licensed qrcode-generator library, with no
+external QR service or CDN request.
 
-Chrome and Edge 147+ are expected to handle the secure-site-to-local-network case through the browser's Local Network Access permission prompt instead of requiring a locally trusted WSS certificate.
+The receiving device must be on the same private network. Scan the QR or open
+the copied AO link once. AO stores its bridge URL in browser local storage,
+then removes only the setup parameter from the address bar. Later visits use
+the ordinary AO address. Browser storage is specific to that browser/profile;
+clearing it requires registration again. If storage is blocked, the setup URL
+is retained so it remains reusable.
 
-## Product Flow
+If DHCP changes the flight PC address, register a fresh link. AO Connection
+also accepts a pasted link and offers Use local bridge for recovery. There is
+no automatic discovery or cloud telemetry relay. Concurrent browsers receive
+the same telemetry through separate WebSocket connections.
 
-The default first-run flow becomes:
+## Browser Permission and Compatibility
 
-1. Verify or install required runtimes.
-2. Open Windows Firewall inbound TCP 39000 for the private network.
-3. Start the MSFS local bridge.
-4. Open AO with the generated `ws://<WINDOWS_IP>:39000/stream` connect URL.
-5. User allows the browser Local Network Access prompt.
-6. AO connects to the bridge and starts receiving MSFS telemetry.
+AO initiates the connection; the browser owns its network permission prompt.
+Bridge owns Windows firewall setup. Neither application can grant the browser
+permission silently. A refused connection has recovery guidance and an initial
+connection timeout; the user can update site permissions and retry sync.
 
-## Still Required
+Chrome/Edge with WebSocket local-network permission support are the target.
+[Chrome 147 release notes](https://developer.chrome.com/release-notes/147)
+document the expansion of local-network restrictions to WebSockets.
+Safari/iOS, older browsers, managed policies, Public-profile or isolated guest
+networks are not guaranteed by this transport. A QR does not bypass these limits.
 
-- MSFS 2020 or 2024 on the Windows host.
-- SimConnect runtime files.
-- VC++ Redistributable when required by SimConnect/native components.
-- .NET runtime only for non-self-contained builds.
-- Windows Firewall inbound TCP 39000 for listener devices on the same LAN.
-- A running bridge before AO attempts the WebSocket connection.
-- Browser permission approval for Local Network Access.
+## Scope
 
-## Removed From Default Flow
-
-- Secure Mode as a required onboarding step.
-- Local Root CA generation for normal browser use.
-- Listener-device Root CA installation.
-- Host or listener certificate trust steps.
-- Hosts file mapping for `ao.home.arpa`.
-- WSS listener endpoint as the normal connection path.
-- TCP 39002 as a default firewall requirement.
-- Bootstrap scripts whose only job is CA trust or hosts mapping.
-
-## Browser Support Boundary
-
-The default target is Chrome or Edge 147+.
-
-Safari, iOS Safari, older Chromium browsers, Firefox versions without Local Network Access enabled, enterprise-managed browsers, and locked-down networks are not guaranteed by this V2 default.
-
-If a fallback is needed later, it should be designed as a separate compatibility path rather than remaining in the primary first-run flow.
-
-## Implementation Impact
-
-The product and code should move toward:
-
-- Desktop UI language centered on `Local Bridge`, `Firewall`, `Start Bridge`, `Open AO`, and `Allow Browser Access`.
-- `start.ps1` no longer requiring WSS by default.
-- Diagnostics and preflight no longer treating WSS certificate material or TCP 39002 as default blockers.
-- Desktop app state no longer blocking bridge start on Secure Mode.
-- `Open Firewall Rules` opening TCP 39000 only by default.
-- README and first-time checklist updated after code behavior matches this decision.
-
-## Non-Goals
-
-- This decision does not remove the need for Windows Firewall access.
-- This decision does not remove runtime or SimConnect prerequisites.
-- This decision does not guarantee Safari or older-browser support.
-- This decision does not require preserving WSS as an in-app advanced mode.
+Telemetry payload version 1 is unchanged. WSS, local CA installation, hosts
+mapping, and TCP 39002 remain legacy compatibility paths, outside default
+onboarding. Host Console remains extensible for later control features; this
+change adds no simulator control commands or authorization model for them.
