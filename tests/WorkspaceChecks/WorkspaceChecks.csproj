@@ -11,6 +11,7 @@
     <Compile Include="../../desktop/MsfsLocalBridge/Services/AppStateBuilder.cs" Link="AppStateBuilder.cs" />
     <Compile Include="../../desktop/MsfsLocalBridge/Services/BridgeSessionService.cs" Link="BridgeSessionService.cs" />
     <Compile Include="../../desktop/MsfsLocalBridge/Services/PowerShellRunner.cs" Link="PowerShellRunner.cs" />
+    <Compile Include="../../desktop/MsfsLocalBridge/Services/BridgeDiagnosticsService.cs" Link="BridgeDiagnosticsService.cs" />
     <Compile Include="../../desktop/MsfsLocalBridge/Models/*.cs" Link="Models/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

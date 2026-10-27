@@ -63,12 +63,14 @@ for (const button of previewButtons) {
 for (const button of tabButtons) {
   button.addEventListener("click", () => {
     activateTab(button.dataset.tabTarget);
+    postHostMessage({ type: "refresh" });
   });
 }
 
 for (const button of compositeTabButtons) {
   button.addEventListener("click", () => {
     activateCompositeTab(button.dataset.compositeTabTarget);
+    postHostMessage({ type: "refresh" });
   });
 }
 
@@ -158,6 +160,7 @@ function finishInitialLoading() {
 }
 
 function openDiagnosticsDrawer() {
+  postHostMessage({ type: "refresh" });
   document.body.classList.add("drawer-open");
   diagnosticsDrawer?.setAttribute("aria-hidden", "false");
   if (drawerScrim) {

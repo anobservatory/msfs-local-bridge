@@ -33,6 +33,8 @@ startup, synchronous window shutdown, startup failure/retry, current-run error
 reporting, unexpected exit, and cancellation cleanup of parent/child processes.
 These checks do not launch MSFS, use the user's running Bridge, open port 39000,
 or change firewall/network settings. CI runs them before publishing the ZIP.
+Deterministic diagnostics-cache checks also cover expiry, forced refresh,
+concurrent reads, invalidation during a query, failure retry, and cancellation.
 
 For a focused edit to desktop services, run:
 
@@ -71,7 +73,7 @@ Use PowerShell 7 for the integration smoke script:
 
 ```powershell
 .\tests\smoke-windows.ps1 -PackageDirectory '<extracted portable folder>'
-.\tests\smoke-windows.ps1 -PackageDirectory '<extracted portable folder>' -TestWorkerPath '.\tests\WorkspaceChecks\bin\Release\net10.0-windows\WorkspaceChecks.exe'
+.\tests\smoke-windows.ps1 -PackageDirectory '<extracted portable folder>' -TestWorkerPath '.\tests\WorkspaceChecks\bin\Release\net10.0-windows\WorkspaceChecks.exe' -TestBootstrap
 ```
 
 The first check launches the packaged embedded bridge on a temporary loopback
@@ -79,6 +81,10 @@ port and checks HTTP health and a WebSocket handshake. The second sends clearly
 identified synthetic IPC telemetry through the packaged bridge and verifies
 its version-1 stream. The fixture is never copied into the release package.
 Neither check proves an actual MSFS flight or native SimConnect connection.
+The second also checks optional bootstrap HTML, manifest, and generated scripts
+without executing those scripts. The first verifies bootstrap stays disabled
+by default. See [diagnostics measurements](diagnostics-performance.md) for the
+read-only performance commands and refresh policy.
 
 Open the extracted desktop app and confirm:
 

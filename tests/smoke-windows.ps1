@@ -2,7 +2,8 @@
 param(
   [Parameter(Mandatory = $true)]
   [string]$PackageDirectory,
-  [string]$TestWorkerPath
+  [string]$TestWorkerPath,
+  [switch]$TestBootstrap
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,7 +37,8 @@ $info.RedirectStandardError = $true
 $info.Environment.Remove('MSFS_BRIDGE_BIND') | Out-Null
 $info.Environment['MSFS_BRIDGE_PORT'] = "$port"
 $info.Environment['MSFS_BRIDGE_WSS_ENABLED'] = 'false'
-$info.Environment['MSFS_BRIDGE_BOOTSTRAP_ENABLED'] = 'false'
+$info.Environment['MSFS_BRIDGE_BOOTSTRAP_ENABLED'] = "$($TestBootstrap.IsPresent)".ToLowerInvariant()
+$info.Environment['MSFS_BRIDGE_BOOTSTRAP_PATH'] = '/bootstrap'
 $info.Environment['MSFS_BRIDGE_SIMCONNECT_MODE'] = 'embedded'
 if ($TestWorkerPath) {
   $info.Environment['MSFS_BRIDGE_SIMCONNECT_MODE'] = 'worker'
@@ -61,6 +63,22 @@ try {
   if (-not $health -or $health.name -ne 'msfs-local-bridge') { throw 'Bridge health endpoint failed.' }
   if ($health.wssEnabled) { throw 'Default package unexpectedly enabled WSS.' }
   Write-Host "PASS: Packaged bridge HTTP health ($($health.simConnectMode))."
+  if ($TestBootstrap) {
+    $base = "http://127.0.0.1:$port/bootstrap"
+    $manifest = Invoke-RestMethod -Uri "$base/manifest.json" -TimeoutSec 5
+    if ($manifest.name -ne 'msfs-local-bridge-bootstrap' -or $manifest.wssEnabled) { throw 'Unexpected bootstrap manifest.' }
+    $page = Invoke-WebRequest -Uri $base -TimeoutSec 5
+    $mac = Invoke-WebRequest -Uri "$base/listener/mac.sh" -TimeoutSec 5
+    $windows = Invoke-WebRequest -Uri "$base/listener/windows.ps1" -TimeoutSec 5
+    if ($page.Content -notmatch '<!doctype html>' -or $mac.Content -notmatch '#!/usr/bin/env bash' -or $windows.Content -notmatch 'Import-Certificate') {
+      throw 'Bootstrap content could not be rendered.'
+    }
+    Write-Host 'PASS: Optional bootstrap page, manifest, and generated scripts render (scripts are never executed).'
+  } else {
+    $bootstrap = Invoke-WebRequest -Uri "http://127.0.0.1:$port/bootstrap" -SkipHttpErrorCheck -TimeoutSec 5
+    if ($bootstrap.StatusCode -ne 404) { throw 'Disabled bootstrap endpoint must return 404.' }
+    Write-Host 'PASS: Bootstrap endpoints stay disabled by default.'
+  }
   $bindings = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction Stop)
   if (-not $bindings.Count -or @($bindings | Where-Object LocalAddress -ne '127.0.0.1').Count) { throw 'Default bridge must bind only to loopback.' }
   Write-Host 'PASS: Default listener accepts local connections only.'
