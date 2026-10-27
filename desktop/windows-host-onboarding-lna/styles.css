@@ -946,9 +946,10 @@ body.embedded-host .preview-switcher {
   }
 }
 
-.sharing-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
+#other-devices-pane .composite-head { margin-bottom: 4px; }
+.sharing-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
 .host-notification { padding: 10px 14px; border: 1px solid #526d88; border-radius: 10px; color: #dceaff; background: #182b40; font-size: 12px; }
-#sharing-note { margin: 10px 0; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+#sharing-note { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
 #sharing-connection { --sharing-qr-size: 136px; }
 #sharing-connection:not([hidden]) { display: grid; grid-template-columns: var(--sharing-qr-size) minmax(0, 1fr); gap: 14px; align-items: start; margin-top: 12px; }
 #connection-qr { width: var(--sharing-qr-size); max-width: 100%; margin: 0; background: white; border-radius: 8px; }

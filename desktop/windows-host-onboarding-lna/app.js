@@ -369,38 +369,6 @@ function localBridgeUrl(state) {
   return "Not available";
 }
 
-function blockedChecklistLabel(state) {
-  if (state.canInstallDotNet || state.canInstallVcRedist) {
-    return "Install runtimes";
-  }
-
-  if (state.allowLanAccess && state.firewallStepText !== "Ready") {
-    return "Open firewall first";
-  }
-
-  return state.listenerSetupState || "Not ready";
-}
-
-function bridgeStartButtonLabel(state) {
-  if (state.canStartBridge) {
-    return state.startBridgeButtonText || "Start Bridge";
-  }
-
-  if (state.bridgeStatus === "Running" || state.startBridgeStepText === "Running") {
-    return "Running";
-  }
-
-  return blockedChecklistLabel(state);
-}
-
-function openAoButtonLabel(state) {
-  if (state.canUseListenerSetup) {
-    return "Open AO";
-  }
-
-  return state.listenerSetupState || blockedChecklistLabel(state);
-}
-
 function applyState(state) {
   lastHostState = state;
   for (const button of actionButtons) button.disabled = false;
@@ -419,10 +387,11 @@ function applyState(state) {
   setText("focus-state", recommendation.tone);
   setText("dotnet-current-note", state.dotNetCurrentNote);
   setText("vcredist-current-note", state.vcRedistCurrentNote);
-  setText("start-bridge-current-note", state.startBridgeCurrentNote);
-  setText("open-ao-current-note", state.canUseListenerSetup
-    ? openAoSessionCopy
-    : state.listenerSetupNote);
+  setText("connect-ao-current-note", bridgeRunning
+    ? "Bridge is running. Open AO and Start Sync."
+    : state.canStartBridge && state.bridgeStatus !== "Start failed"
+      ? "Start Bridge, then open AO."
+      : state.startBridgeCurrentNote || "Start Bridge, then open AO.");
   setText("host-readiness-chip", state.blockerText);
   setText("host-ip", state.hostIp);
   setText("secure-stream", state.secureStream);
@@ -457,15 +426,15 @@ function applyState(state) {
   setActionButtonText("install-dotnet-button", state.dotNetButtonText);
   setActionButtonText("install-vcredist-button", state.vcRedistButtonText);
   setActionButtonText("open-firewall-rules-button", state.allowLanAccess ? "Manage Access" : state.canEnableSharing ? "Enable Access" : "Review Access");
-  setActionButtonText("start-bridge-button", bridgeStartButtonLabel(state));
-  setActionButtonText("open-ao-button", openAoButtonLabel(state));
+  const connectAoButton = document.getElementById("connect-ao-button");
+  connectAoButton.dataset.action = bridgeRunning ? "open-bootstrap-page" : "start-bridge";
+  connectAoButton.textContent = bridgeRunning ? "Open AO" : "Start Bridge";
 
   setDisabled("focus-action-button", isRecommendedActionDisabled(recommendation.action, state));
   setDisabled("install-dotnet-button", !state.canInstallDotNet);
   setDisabled("install-vcredist-button", !state.canInstallVcRedist);
   setDisabled("open-firewall-rules-button", false);
-  setDisabled("start-bridge-button", !state.canStartBridge);
-  setDisabled("open-ao-button", !state.canUseListenerSetup);
+  setDisabled("connect-ao-button", bridgeRunning ? !state.canUseListenerSetup : !state.canStartBridge);
   setDisabled("stop-bridge-button", !state.canStopBridge);
   setDisabled("restart-bridge-button", !state.canRestartBridge);
   setDisabled("copy-link-button", !state.canShareConnection);
@@ -484,8 +453,7 @@ function applyState(state) {
     "install-dotnet-button",
     "install-vcredist-button",
     "open-firewall-rules-button",
-    "start-bridge-button",
-    "open-ao-button",
+    "connect-ao-button",
     "host-readiness-chip",
     "listener-readiness-pill"
   ];
