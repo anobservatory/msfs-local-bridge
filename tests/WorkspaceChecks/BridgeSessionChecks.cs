@@ -92,6 +92,7 @@ internal static class BridgeSessionChecks
     {
         await using var fixture = new ProcessFixture(root);
         fixture.WriteRunningScript();
+        using var closeAllowed = new ManualResetEventSlim();
         var closing = Task.Run(() =>
         {
             var previous = SynchronizationContext.Current;
@@ -99,13 +100,15 @@ internal static class BridgeSessionChecks
             try
             {
                 var starting = fixture.Session.StartAsync();
+                if (!closeAllowed.Wait(TimeSpan.FromSeconds(8))) throw new TimeoutException("Fixture did not become ready for window shutdown.");
                 fixture.Session.StopAsync().WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
                 starting.WaitAsync(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult();
                 Require(!fixture.Session.IsRunning, "Synchronous window shutdown left a process running.");
             }
             finally { SynchronizationContext.SetSynchronizationContext(previous); }
         });
-        await fixture.CaptureAsync("parent.pid");
+        try { await fixture.CaptureAsync("parent.pid"); }
+        finally { closeAllowed.Set(); }
         await closing;
     }
 
@@ -210,7 +213,7 @@ internal static class BridgeSessionChecks
         {
             File.WriteAllText(FilePath("child.ps1"), "Start-Sleep -Seconds 120");
             var child = spawnChild ? """
-                $childArguments = '-NoLogo -NoProfile -NonInteractive -File "' + (Join-Path $PSScriptRoot 'child.ps1') + '"'
+                $childArguments = '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot 'child.ps1') + '"'
                 $fixtureChild = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $childArguments -WindowStyle Hidden -PassThru
                 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'child.pid'), [string]$fixtureChild.Id)
                 """ : "";
@@ -252,7 +255,10 @@ internal static class BridgeSessionChecks
                     }
                 });
             }
-            catch (TimeoutException ex) { throw new TimeoutException($"Fixture {name} never became available.", ex); }
+            catch (TimeoutException ex)
+            {
+                throw new TimeoutException($"Fixture {name} never became available. Session log:{Environment.NewLine}{Session.RuntimeLog}", ex);
+            }
             _owned.Add(process!);
             return process!;
         }
