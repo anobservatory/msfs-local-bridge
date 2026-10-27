@@ -62,7 +62,7 @@ internal sealed class AppStateBuilder
             + (requiredFirewallReady ? 0 : 1)
             + (portAvailable ? 0 : 1);
 
-        var bootstrapStatus = BuildBootstrapStatus(hasRequiredHostRuntime, requiredFirewallReady, portAvailable, session.IsRunning, true);
+        var bootstrapStatus = BuildBootstrapStatus(hasRequiredHostRuntime, requiredFirewallReady, portAvailable, session.IsRunning);
         var startBridgeState = session.IsRunning ? "Running" : bridgeStartReady ? "Action" : "Locked";
         var startBridgeNote = BuildStartBridgeNote(hasRequiredHostRuntime, requiredFirewallReady, portAvailable, session.IsRunning, localBridgeUrl, hasStartFailure, startFailure);
         var listenerSetupNote = session.IsRunning ? "Visit anobservatory.com, select MSFS Connect, and Start Sync. Allow browser local network access if asked." : "Start Bridge, then open anobservatory.com.";
@@ -109,7 +109,7 @@ internal sealed class AppStateBuilder
             BridgeControlText = bridgeControlText,
             PrimaryActionText = primaryActionText,
             HostIp = hostIp,
-            SecureStream = localBridgeUrl == "Not available" ? "Not available" : "39000 /stream",
+            SecureStream = "39000 /stream",
             LastIssue = issues.FirstOrDefault() ?? "No issues",
             ConnectUrl = connectUrl,
             AllowLanAccess = allowLanAccess,
@@ -148,7 +148,7 @@ internal sealed class AppStateBuilder
         };
     }
 
-    private static string BuildBootstrapStatus(bool hasRequiredHostRuntime, bool firewallReady, bool portAvailable, bool bridgeRunning, bool hasLocalBridgeAddress)
+    private static string BuildBootstrapStatus(bool hasRequiredHostRuntime, bool firewallReady, bool portAvailable, bool bridgeRunning)
     {
         if (!hasRequiredHostRuntime)
         {
@@ -170,11 +170,6 @@ internal sealed class AppStateBuilder
             return "Start bridge first";
         }
 
-        if (!hasLocalBridgeAddress)
-        {
-            return "LAN IP needed";
-        }
-
         return "Ready";
     }
 
@@ -182,9 +177,7 @@ internal sealed class AppStateBuilder
     {
         if (bridgeRunning)
         {
-            return localBridgeUrl == "Not available"
-                ? "Bridge is running, but the host LAN address is not available yet."
-                : $"Bridge is running at {localBridgeUrl}. Open AO and allow browser local network access.";
+            return $"Bridge is running at {localBridgeUrl}. Open AO and allow browser local network access.";
         }
 
         if (hasStartFailure)
@@ -208,36 +201,6 @@ internal sealed class AppStateBuilder
         }
 
         return "Start the local stream before opening AO in the browser.";
-    }
-
-    private static string BuildListenerSetupNote(bool hasRequiredHostRuntime, bool firewallReady, bool portAvailable, bool bridgeRunning, bool hasLocalBridgeAddress)
-    {
-        if (!hasRequiredHostRuntime)
-        {
-            return "Install .NET and VC++ on the host PC first.";
-        }
-
-        if (!firewallReady)
-        {
-            return "Open inbound TCP 39000 on the private network before opening AO.";
-        }
-
-        if (!portAvailable)
-        {
-            return "TCP 39000 is already in use. Stop the conflicting process before starting the bridge.";
-        }
-
-        if (!bridgeRunning)
-        {
-            return "Start the bridge on the host PC before opening AO.";
-        }
-
-        if (!hasLocalBridgeAddress)
-        {
-            return "The host LAN address could not be detected yet, so AO cannot connect from this network.";
-        }
-
-        return "Open AO with this session's bridge URL. After that, use anobservatory.com normally.";
     }
 
     private static int PriorityFor(string id)

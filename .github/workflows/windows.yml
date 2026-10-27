@@ -24,8 +24,8 @@ jobs:
           cmake --build workers/simconnect-native/build --config Release
           exit $LASTEXITCODE
       - name: Build unified solution
-        run: dotnet build MsfsLocalBridge.Windows.slnx -c Release -m:1 -p:NuGetAudit=false
-      - name: Check workspace discovery
+        run: dotnet build MsfsLocalBridge.Windows.slnx -c Release -m:1 -p:NuGetAudit=false -warnaserror
+      - name: Check host state and process lifecycle
         run: dotnet run --project tests/WorkspaceChecks/WorkspaceChecks.csproj -c Release --no-build
       - name: Publish portable desktop app
         shell: pwsh

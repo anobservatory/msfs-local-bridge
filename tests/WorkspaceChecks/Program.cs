@@ -75,6 +75,8 @@ try
     state = new AppStateBuilder().Build(diagnostics, "{}", session, prerequisites);
     Require(!state.CanEnableSharing && state.SharingStatus == "Check network profile", "An unknown profile is not advertised as ready.");
 
+    await BridgeSessionChecks.RunAsync(fixture);
+
     var bundled = Path.Combine(output, "bridge");
     CreatePayload(bundled);
     var console = Path.Combine(output, "resources", "host-console");

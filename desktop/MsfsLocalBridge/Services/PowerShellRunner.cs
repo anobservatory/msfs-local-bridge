@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO;
-using System.Text;
 
 namespace MsfsLocalBridge.Services;
 
@@ -18,18 +17,20 @@ internal sealed class PowerShellRunner
         var startInfo = CreateStartInfo(workingDirectory, arguments, redirectIo: true, useShellExecute: false, createNoWindow: true);
 
         using var process = new Process { StartInfo = startInfo };
-        var stdout = new StringBuilder();
-        var stderr = new StringBuilder();
-
         process.Start();
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        try { await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            try { process.Kill(entireProcessTree: true); }
+            catch (InvalidOperationException) when (process.HasExited) { }
+            await process.WaitForExitAsync().ConfigureAwait(false);
+            await Task.WhenAll(outputTask, errorTask).ConfigureAwait(false);
+            throw;
+        }
 
-        stdout.Append(await outputTask);
-        stderr.Append(await errorTask);
-
-        return new PowerShellResult(process.ExitCode, stdout.ToString(), stderr.ToString());
+        return new PowerShellResult(process.ExitCode, await outputTask.ConfigureAwait(false), await errorTask.ConfigureAwait(false));
     }
 
     public Process StartStreaming(
@@ -60,11 +61,6 @@ internal sealed class PowerShellRunner
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         return process;
-    }
-
-    public void StartElevated(string workingDirectory, string arguments)
-    {
-        Process.Start(CreateStartInfo(workingDirectory, arguments, redirectIo: false, useShellExecute: true, createNoWindow: false, verb: "runas"));
     }
 
     public async Task<int> RunElevatedAsync(string workingDirectory, string arguments)
