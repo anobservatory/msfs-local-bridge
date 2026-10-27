@@ -98,18 +98,12 @@ body.embedded-host {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: none;
 }
 
 body.embedded-host::-webkit-scrollbar {
-  width: 8px;
-}
-
-body.embedded-host::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 4px;
+  width: 0;
+  height: 0;
 }
 
 .topbar {
