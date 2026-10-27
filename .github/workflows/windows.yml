@@ -39,7 +39,7 @@ jobs:
           $extracted = Join-Path $env:RUNNER_TEMP 'AO portable smoke'
           [IO.Compression.ZipFile]::ExtractToDirectory($zip.FullName, $extracted)
           ./tests/smoke-windows.ps1 -PackageDirectory $extracted
-          ./tests/smoke-windows.ps1 -PackageDirectory $extracted -TestWorkerPath tests/WorkspaceChecks/bin/Release/net10.0-windows/WorkspaceChecks.exe
+          ./tests/smoke-windows.ps1 -PackageDirectory $extracted -TestWorkerPath tests/WorkspaceChecks/bin/Release/net10.0-windows/WorkspaceChecks.exe -TestBootstrap
       - uses: actions/upload-artifact@v6
         with:
           name: msfs-local-bridge-windows-x64-lite

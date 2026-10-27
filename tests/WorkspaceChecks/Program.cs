@@ -2,6 +2,12 @@ using MsfsLocalBridge.Services;
 using MsfsLocalBridge.Models;
 using System.Text.Json;
 
+if (args is ["--measure-diagnostics", var repositoryRoot])
+{
+    await DiagnosticsChecks.MeasureAsync(repositoryRoot);
+    return;
+}
+
 // A deterministic IPC fixture for package smoke tests, never a production worker.
 if (args.Contains("--test-worker"))
 {
@@ -76,6 +82,7 @@ try
     Require(!state.CanEnableSharing && state.SharingStatus == "Check network profile", "An unknown profile is not advertised as ready.");
 
     await BridgeSessionChecks.RunAsync(fixture);
+    await DiagnosticsChecks.RunAsync();
 
     var bundled = Path.Combine(output, "bridge");
     CreatePayload(bundled);

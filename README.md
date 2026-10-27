@@ -59,6 +59,24 @@ build requirements and package verification. The web app remains in
 `anobservatory/anobservatory`; its connection settings support ordinary-site
 entry, remembered QR registration, and explicit connection recovery.
 
+## Source layout and maintenance
+
+- `Program.cs`: service registration, listeners, startup, and endpoint composition.
+- `Configuration/`, `Security/`: environment options, runtime paths, and optional TLS.
+- `Web/`: health, local discovery, telemetry stream, and optional bootstrap endpoints.
+- `Telemetry/`, `SimConnect/`: snapshot state and embedded simulator ingestion.
+- `desktop/MsfsLocalBridge/`: WPF host, window frame, WebView messages, services, and models.
+- `desktop/windows-host-onboarding-lna/`: packaged console UI.
+- `workers/`: optional native SimConnect worker.
+- `tests/`: isolated host/lifecycle/cache checks and extracted-package smoke checks.
+
+The console still updates every five seconds. Full host diagnostics are reused
+for up to 30 seconds, while process state and prerequisites are read on each
+update. Host-changing actions, tab/diagnostics navigation, and window activation
+refresh the report. Enabling sharing always performs a fresh network-profile
+check. See [diagnostics measurements](docs/diagnostics-performance.md) for the
+measured cost, cache behavior, and reproducible commands.
+
 ## Manual Bridge Usage
 
 - Local stream endpoint: `ws://127.0.0.1:39000/stream`
