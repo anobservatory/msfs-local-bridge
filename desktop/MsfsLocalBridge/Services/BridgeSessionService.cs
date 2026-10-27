@@ -11,10 +11,13 @@ internal sealed class BridgeSessionService
     private readonly ConnectionSettings _connectionSettings;
     private readonly StringBuilder _runtimeLog = new();
     private readonly object _sync = new();
+    private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private Process? _process;
     private string? _lastFailureReason;
     private int? _lastExitCode;
     private int? _expectedExitProcessId;
+    private int? _observedExitProcessId;
+    private int _runId;
 
     public BridgeSessionService(BridgeWorkspace workspace, PowerShellRunner runner, ConnectionSettings connectionSettings)
     {
@@ -23,7 +26,13 @@ internal sealed class BridgeSessionService
         _connectionSettings = connectionSettings;
     }
 
-    public bool IsRunning => _process is { HasExited: false };
+    public bool IsRunning
+    {
+        get
+        {
+            lock (_sync) { return _process is { HasExited: false }; }
+        }
+    }
 
     public string? LastFailureReason
     {
@@ -60,12 +69,38 @@ internal sealed class BridgeSessionService
 
     public async Task StartAsync()
     {
+        await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+        try { await StartCoreAsync().ConfigureAwait(false); }
+        finally { _lifecycleGate.Release(); }
+    }
+
+    public async Task StopAsync()
+    {
+        await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+        try { await StopCoreAsync().ConfigureAwait(false); }
+        finally { _lifecycleGate.Release(); }
+    }
+
+    public async Task RestartAsync()
+    {
+        await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await StopCoreAsync().ConfigureAwait(false);
+            await StartCoreAsync().ConfigureAwait(false);
+        }
+        finally { _lifecycleGate.Release(); }
+    }
+
+    private async Task StartCoreAsync()
+    {
         if (IsRunning)
         {
             return;
         }
 
-        ResetFailureState();
+        await StopCoreAsync().ConfigureAwait(false);
+        var runId = ResetFailureState();
 
         var launchProfile = CreateLaunchProfile();
         AppendLog($"bridge: starting run-bridge.ps1 ({launchProfile.ModeLabel})");
@@ -80,43 +115,59 @@ internal sealed class BridgeSessionService
         var process = _runner.StartStreaming(
             _workspace.BridgeRepoRoot,
             launchProfile.Arguments,
-            AppendLog,
-            line => AppendLog($"ERROR: {line}"));
-        process.Exited += (_, _) => OnProcessExited(process);
-        _process = process;
+            line => AppendLog(line, runId),
+            line => AppendLog($"ERROR: {line}", runId));
+        process.Exited += (_, _) => OnProcessExited(process, runId);
+        lock (_sync) { _process = process; }
 
-        await Task.Delay(1500);
+        // Window shutdown synchronously waits for StopAsync. Do not require its
+        // UI synchronization context to finish a pending Start or Restart.
+        await Task.Delay(1500).ConfigureAwait(false);
         if (process.HasExited)
         {
-            _process = null;
-            throw new InvalidOperationException(LastFailureReason ?? $"Bridge exited with code {process.ExitCode}.");
+            process.WaitForExit(); // Drain redirected output before diagnosing startup.
+            OnProcessExited(process, runId);
+            var reason = LastFailureReason ?? $"Bridge exited with code {process.ExitCode}.";
+            await StopCoreAsync().ConfigureAwait(false);
+            throw new InvalidOperationException(reason);
         }
     }
 
-    public Task StopAsync()
+    private async Task StopCoreAsync()
     {
-        if (!IsRunning || _process is null)
-        {
-            return Task.CompletedTask;
-        }
-
+        Process? process;
+        bool shouldStop;
         lock (_sync)
         {
-            _expectedExitProcessId = _process.Id;
+            process = _process;
+            if (process is null) return;
+            shouldStop = !process.HasExited;
+            if (shouldStop) _expectedExitProcessId = process.Id;
         }
 
-        AppendLog("bridge: stopping process");
-        _process.Kill(entireProcessTree: true);
-        _process.WaitForExit();
-        _process.Dispose();
-        _process = null;
-        return Task.CompletedTask;
-    }
-
-    public async Task RestartAsync()
-    {
-        await StopAsync();
-        await StartAsync();
+        try
+        {
+            if (shouldStop)
+            {
+                AppendLog("bridge: stopping process");
+                try { process.Kill(entireProcessTree: true); }
+                catch (InvalidOperationException) when (process.HasExited) { }
+            }
+            await process.WaitForExitAsync().ConfigureAwait(false);
+            process.WaitForExit();
+            OnProcessExited(process, _runId);
+        }
+        finally
+        {
+            bool hasExited;
+            lock (_sync)
+            {
+                // Retain a live process if termination failed so Stop can retry.
+                hasExited = process.HasExited;
+                if (hasExited) _process = null;
+            }
+            if (hasExited) process.Dispose();
+        }
     }
 
     public void ClearLog()
@@ -194,7 +245,7 @@ internal sealed class BridgeSessionService
         }
     }
 
-    private void OnProcessExited(Process process)
+    private void OnProcessExited(Process process, int runId)
     {
         int exitCode;
         int processId;
@@ -211,6 +262,8 @@ internal sealed class BridgeSessionService
 
         lock (_sync)
         {
+            if (runId != _runId || _observedExitProcessId == processId) return;
+            _observedExitProcessId = processId;
             _lastExitCode = exitCode;
             wasIntentionalStop = _expectedExitProcessId == processId;
 
@@ -220,7 +273,7 @@ internal sealed class BridgeSessionService
             }
             else
             {
-                _lastFailureReason ??= BuildFailureReason(_runtimeLog.ToString(), exitCode);
+                _lastFailureReason ??= $"Bridge exited with code {exitCode}.";
             }
         }
 
@@ -233,16 +286,19 @@ internal sealed class BridgeSessionService
         AppendLog($"bridge: exited with code {exitCode}");
     }
 
-    private void ResetFailureState()
+    private int ResetFailureState()
     {
         lock (_sync)
         {
             _lastFailureReason = null;
             _lastExitCode = null;
+            _expectedExitProcessId = null;
+            _observedExitProcessId = null;
+            return ++_runId;
         }
     }
 
-    private void AppendLog(string line)
+    private void AppendLog(string line, int? runId = null)
     {
         lock (_sync)
         {
@@ -252,7 +308,7 @@ internal sealed class BridgeSessionService
             }
 
             _runtimeLog.Append($"[{DateTime.Now:HH:mm:ss}] {line}");
-            _lastFailureReason = DetectFailureReason(line) ?? _lastFailureReason;
+            if (runId == _runId) _lastFailureReason = DetectFailureReason(line) ?? _lastFailureReason;
         }
     }
 
@@ -284,26 +340,6 @@ internal sealed class BridgeSessionService
         }
 
         return null;
-    }
-
-    private static string BuildFailureReason(string runtimeLog, int exitCode)
-    {
-        if (runtimeLog.Contains("address already in use", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Port 39000 is already in use.";
-        }
-
-        if (runtimeLog.Contains("Failed to bind to address", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Bridge could not bind to the required port.";
-        }
-
-        if (runtimeLog.Contains("Worker executable not found", StringComparison.OrdinalIgnoreCase))
-        {
-            return "SimConnect worker executable is missing.";
-        }
-
-        return $"Bridge exited with code {exitCode}.";
     }
 
     private sealed record BridgeLaunchProfile(string Arguments, string ModeLabel, string? Note);

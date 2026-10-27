@@ -25,6 +25,25 @@ dotnet run --project .\tests\WorkspaceChecks\WorkspaceChecks.csproj -c Release -
 The desktop build publishes the root bridge project into its own `bridge/`
 payload. It has no dependency on another repository or its build output.
 
+The `WorkspaceChecks` executable verifies source/package discovery, saved
+sharing settings, runtime/firewall state decisions, and process lifecycle.
+Its lifecycle fixtures launch isolated PowerShell scripts in temporary folders
+to check repeated Start/Stop, restart with changed sharing settings, Stop during
+startup, synchronous window shutdown, startup failure/retry, current-run error
+reporting, unexpected exit, and cancellation cleanup of parent/child processes.
+These checks do not launch MSFS, use the user's running Bridge, open port 39000,
+or change firewall/network settings. CI runs them before publishing the ZIP.
+
+For a focused edit to desktop services, run:
+
+```powershell
+dotnet run --project .\tests\WorkspaceChecks\WorkspaceChecks.csproj -c Release
+```
+
+Run the full solution build and extracted-package smoke checks when changing
+process launch, packaging, or the stream contract. Keep real MSFS flight and
+another-device network checks separate from synthetic fixture results.
+
 For the optional native worker:
 
 ```powershell
