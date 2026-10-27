@@ -76,6 +76,8 @@ update. Host-changing actions, tab/diagnostics navigation, and window activation
 refresh the report. Enabling sharing always performs a fresh network-profile
 check. See [diagnostics measurements](docs/diagnostics-performance.md) for the
 measured cost, cache behavior, and reproducible commands.
+See [compatible prerequisite updates](docs/prerequisite-updates.md) for the
+supported .NET channel, recommended installers, and read-only release checks.
 
 ## Manual Bridge Usage
 

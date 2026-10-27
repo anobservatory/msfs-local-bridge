@@ -83,6 +83,7 @@ try
 
     await BridgeSessionChecks.RunAsync(fixture);
     await DiagnosticsChecks.RunAsync();
+    PrerequisiteChecks.Run(fixture);
 
     var bundled = Path.Combine(output, "bridge");
     CreatePayload(bundled);
