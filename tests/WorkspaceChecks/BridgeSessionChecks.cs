@@ -3,6 +3,9 @@ using MsfsLocalBridge.Services;
 
 internal static class BridgeSessionChecks
 {
+    // A fresh Windows runner can spend several seconds initializing PowerShell
+    // before the fixture script runs. Keep readiness separate from Stop deadlines.
+    private const int StartupReadinessTimeoutMs = 15000;
     public static async Task RunAsync(string root)
     {
         var failures = new List<string>();
@@ -20,7 +23,7 @@ internal static class BridgeSessionChecks
         {
             try
             {
-                await check(root).WaitAsync(TimeSpan.FromSeconds(20));
+                await check(root).WaitAsync(TimeSpan.FromSeconds(45));
                 Console.WriteLine($"PASS: {name}.");
             }
             catch (Exception ex)
@@ -100,7 +103,7 @@ internal static class BridgeSessionChecks
             try
             {
                 var starting = fixture.Session.StartAsync();
-                if (!closeAllowed.Wait(TimeSpan.FromSeconds(8))) throw new TimeoutException("Fixture did not become ready for window shutdown.");
+                if (!closeAllowed.Wait(TimeSpan.FromMilliseconds(StartupReadinessTimeoutMs + 3000))) throw new TimeoutException("Fixture did not become ready for window shutdown.");
                 fixture.Session.StopAsync().WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
                 starting.WaitAsync(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult();
                 Require(!fixture.Session.IsRunning, "Synchronous window shutdown left a process running.");
@@ -209,7 +212,7 @@ internal static class BridgeSessionChecks
 
         public async Task WaitForLogAsync(string expected)
         {
-            try { await WaitUntilAsync(() => Session.RuntimeLog.Contains(expected)); }
+            try { await WaitUntilAsync(() => Session.RuntimeLog.Contains(expected), StartupReadinessTimeoutMs); }
             catch (TimeoutException ex)
             {
                 throw new InvalidOperationException($"Missing fixture output '{expected}'. Session log:{Environment.NewLine}{Session.RuntimeLog}", ex);
@@ -262,7 +265,7 @@ internal static class BridgeSessionChecks
                         candidate?.Dispose();
                         return false;
                     }
-                });
+                }, StartupReadinessTimeoutMs);
             }
             catch (TimeoutException ex)
             {
