@@ -40,7 +40,7 @@ internal static class BridgeSessionChecks
         var parent = await fixture.CaptureAsync("parent.pid");
         var child = await fixture.CaptureAsync("child.pid");
         Require(File.ReadAllLines(fixture.FilePath("launches.txt")).Length == 1, "Repeated Start launched duplicate processes.");
-        Require(fixture.Session.RuntimeLog.Contains("fixture: bind=127.0.0.1"), "Default launch did not use loopback.");
+        await fixture.WaitForLogAsync("fixture: bind=127.0.0.1");
         await fixture.Session.StopAsync();
         await fixture.Session.StopAsync();
         await WaitUntilAsync(() => parent.HasExited && child.HasExited);
@@ -60,7 +60,7 @@ internal static class BridgeSessionChecks
         await WaitUntilAsync(() => parent.HasExited && child.HasExited);
         Require(replacement.Id != parent.Id && !replacement.HasExited, "Restart did not replace the process.");
         Require(File.ReadAllLines(fixture.FilePath("launches.txt")).Length == 2, "Restart launched an unexpected number of processes.");
-        Require(fixture.Session.RuntimeLog.Contains("fixture: bind=0.0.0.0"), "Restart did not apply the new sharing setting.");
+        await fixture.WaitForLogAsync("fixture: bind=0.0.0.0");
         Require(fixture.Session.LastFailureReason is null, "Restart retained an intentional-stop failure.");
         await fixture.CaptureAsync("child.pid");
     }
@@ -206,6 +206,15 @@ internal static class BridgeSessionChecks
         }
 
         public string FilePath(string name) => Path.Combine(Root, name);
+
+        public async Task WaitForLogAsync(string expected)
+        {
+            try { await WaitUntilAsync(() => Session.RuntimeLog.Contains(expected)); }
+            catch (TimeoutException ex)
+            {
+                throw new InvalidOperationException($"Missing fixture output '{expected}'. Session log:{Environment.NewLine}{Session.RuntimeLog}", ex);
+            }
+        }
 
         public void WriteFailureScript() => WriteScript("Write-Output 'address already in use'\nStart-Sleep -Milliseconds 100\nexit 17");
 
