@@ -9,8 +9,10 @@ namespace MsfsLocalBridge.Services;
 
 internal sealed class PrerequisiteInstallerService
 {
-    private const string DotNetDesktopInstallerUrl = "https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.3/windowsdesktop-runtime-10.0.3-win-x64.exe";
-    private const string AspNetCoreInstallerUrl = "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/10.0.3/aspnetcore-runtime-10.0.3-win-x64.exe";
+    internal const string RecommendedDotNetRuntimeVersion = "10.0.14";
+    internal const string RequiredDotNetChannel = "10.0";
+    private static readonly string DotNetDesktopInstallerUrl = $"https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/{RecommendedDotNetRuntimeVersion}/windowsdesktop-runtime-{RecommendedDotNetRuntimeVersion}-win-x64.exe";
+    private static readonly string AspNetCoreInstallerUrl = $"https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/{RecommendedDotNetRuntimeVersion}/aspnetcore-runtime-{RecommendedDotNetRuntimeVersion}-win-x64.exe";
     private const string VcRedistInstallerUrl = "https://aka.ms/vc14/vc_redist.x64.exe";
 
     public PrerequisiteStatus DetectStatus()
@@ -66,23 +68,29 @@ internal sealed class PrerequisiteInstallerService
         };
     }
 
-    private static (string Status, bool Installed, string Version) DetectSharedRuntime(string sharedFrameworkName, string displayName)
+    internal static (string Status, bool Installed, string Version) DetectSharedRuntime(
+        string sharedFrameworkName, string displayName, string? dotNetRoot = null)
     {
-        var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "shared", sharedFrameworkName);
+        var root = Path.Combine(dotNetRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet"), "shared", sharedFrameworkName);
+        var missingStatus = $"Missing {displayName} ({RequiredDotNetChannel}.x x64)";
         if (!Directory.Exists(root))
         {
-            return ($"Missing {displayName}", false, string.Empty);
+            return (missingStatus, false, string.Empty);
         }
 
+        var channel = Version.Parse(RequiredDotNetChannel);
         var versions = Directory.GetDirectories(root)
             .Select(Path.GetFileName)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .OrderByDescending(name => name, StringComparer.OrdinalIgnoreCase)
+            .Select(name => (Name: name, Parsed: Version.TryParse(name, out var version) ? version : null))
+            .Where(entry => entry.Parsed is { } version && version.Major == channel.Major &&
+                version.Minor == channel.Minor && version.Build >= 0 && version.Revision < 0)
+            .OrderByDescending(entry => entry.Parsed)
+            .Select(entry => entry.Name)
             .ToArray();
 
         if (versions.Length == 0)
         {
-            return ($"Missing {displayName}", false, string.Empty);
+            return (missingStatus, false, string.Empty);
         }
 
         return ($"Installed {displayName} ({versions[0]})", true, versions[0]!);
