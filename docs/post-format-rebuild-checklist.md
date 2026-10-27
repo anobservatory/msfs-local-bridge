@@ -99,6 +99,9 @@ Open the extracted desktop app and confirm:
    an expired host address and browser permission denial/retry separately.
 9. At 150% and 200% Windows display scaling, the sharing QR remains readable,
    its link sits beside it, and short windows can scroll to every control.
+10. Repeatedly switch Setup and Access with a short window. Checklist buttons
+    keep their positions as scrolling becomes necessary, and installed runtime
+    labels stay unchanged unless the actual prerequisite state changes.
 
 Run with MSFS in a loaded cockpit to verify actual aircraft position and
 telemetry. Separately verify another LAN device and permission/firewall failure

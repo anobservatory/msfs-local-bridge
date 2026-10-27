@@ -10,7 +10,7 @@
     <AssemblyName>MsfsLocalBridge</AssemblyName>
     <RootNamespace>MsfsLocalBridge</RootNamespace>
     <Product>MSFS Local Bridge</Product>
-    <Version>0.2.25</Version>
+    <Version>0.2.26</Version>
     <ApplicationIcon>..\ao_black.ico</ApplicationIcon>
     <BridgeRepositoryRoot>$(MSBuildThisFileDirectory)..\..\</BridgeRepositoryRoot>
     <BundledBridgeProject>$(BridgeRepositoryRoot)MsfsLocalBridge.csproj</BundledBridgeProject>
